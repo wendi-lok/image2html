@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image2Html</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f5f5f7;--surface:#fff;--surface2:#f0f0f2;
+  --text:#1d1d1f;--text2:#6e6e73;--text3:#aeaeb2;
+  --accent:#0071e3;--accent-hover:#0077ed;--accent-active:#006edb;
+  --danger:#ff3b30;--success:#34c759;--warning:#ff9500;
+  --border:#d2d2d7;--shadow:0 1px 3px rgba(0,0,0,.08);
+  --radius:12px;--radius-sm:8px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#1c1c1e;--surface:#2c2c2e;--surface2:#3a3a3c;
+    --text:#f5f5f7;--text2:#98989d;--text3:#636366;
+    --border:#48484a;--shadow:0 1px 3px rgba(0,0,0,.3);
+  }
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh}
+button{cursor:pointer;font-family:inherit;border:none;outline:none}
+input,textarea,select{font-family:inherit;outline:none}
+a{color:var(--accent);text-decoration:none}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo{font-size:20px;font-weight:700;letter-spacing:-.5px}
+.header-right{display:flex;align-items:center;gap:8px}
+.btn-icon{width:38px;height:38px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:18px;transition:background .2s}
+.btn-icon:hover{background:var(--border)}
+.lang-toggle{font-size:13px;font-weight:600;padding:5px 12px;border-radius:16px;background:var(--surface2);color:var(--text);transition:all .2s}
+.lang-toggle:hover{background:var(--border)}
+.main{display:flex;height:calc(100vh - 57px)}
+.panel-left{width:420px;min-width:360px;border-right:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.panel-right{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.form-group{display:flex;flex-direction:column;gap:6px}
+.form-label{font-size:14px;font-weight:600;color:var(--text2)}
+.form-input{padding:11px 15px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:15px;transition:border-color .2s}
+.form-input:focus{border-color:var(--accent)}
+textarea.form-input{resize:vertical;min-height:80px}
+select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236e6e73' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.ref-section{border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.ref-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ref-hint{font-size:12px;color:var(--text3)}
+.ref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px}
+.ref-item{position:relative;aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;border:2px solid var(--border);cursor:move;transition:border-color .2s}
+.ref-item:hover{border-color:var(--accent)}
+.ref-item img{width:100%;height:100%;object-fit:cover}
+.ref-item .ref-actions{position:absolute;top:2px;right:2px;display:flex;gap:2px;opacity:0;transition:opacity .2s}
+.ref-item:hover .ref-actions{opacity:1}
+.ref-btn{width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}
+.ref-btn:hover{background:rgba(0,0,0,.8)}
+.ref-upload{aspect-ratio:1;border:2px dashed var(--border);border-radius:var(--radius-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--text3);font-size:13px;cursor:pointer;transition:all .2s}
+.ref-upload:hover{border-color:var(--accent);color:var(--accent)}
+.ref-upload-icon{font-size:28px}
+.url-input-row{display:flex;gap:6px}
+.url-input-row .form-input{flex:1}
+.btn-primary{padding:13px 24px;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:16px;font-weight:600;transition:all .2s;width:100%}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-primary:active{background:var(--accent-active)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{padding:9px 16px;border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);font-size:14px;font-weight:500;transition:all .2s;border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--border)}
+.btn-danger{padding:9px 16px;border-radius:var(--radius-sm);background:var(--danger);color:#fff;font-size:14px;font-weight:500;transition:all .2s}
+.btn-danger:hover{opacity:.9}
+.result-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.result-placeholder{color:var(--text3);font-size:16px;text-align:center}
+.result-images{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;width:100%}
+.result-img-card{background:var(--surface);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--border);max-width:512px}
+.result-img-card img{width:100%;display:block}
+.result-img-actions{padding:10px 12px;display:flex;gap:8px;justify-content:flex-end}
+.loading{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--text2)}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:15px}
+.progress-wrap{width:100%;max-width:360px;margin-top:8px}
+.progress-bar{width:100%;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.progress-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 1s linear;width:0%}
+.progress-text{font-size:13px;color:var(--text3);text-align:center;margin-top:4px}
+.toast{position:fixed;top:20px;right:20px;padding:14px 24px;border-radius:var(--radius-sm);color:#fff;font-size:15px;font-weight:500;z-index:9999;transform:translateX(120%);transition:transform .3s ease;max-width:440px}
+.toast.show{transform:translateX(0)}
+.toast-error{background:var(--danger)}
+.toast-success{background:var(--success)}
+.toast-info{background:var(--accent)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.active{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-title{font-size:18px;font-weight:700;margin-bottom:16px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.history-section{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden}
+.history-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.history-header:hover{background:var(--surface2)}
+.history-header h3{font-size:16px;font-weight:600}
+.history-toggle{font-size:12px;color:var(--text3);transition:transform .2s}
+.history-toggle.open{transform:rotate(180deg)}
+.history-body{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.history-body.open{max-height:2000px}
+.history-list{padding:8px}
+.history-card{display:flex;gap:12px;padding:10px;border-radius:var(--radius-sm);cursor:pointer;transition:background .2s;border:1px solid transparent}
+.history-card:hover{background:var(--surface2);border-color:var(--border)}
+.history-thumb{width:64px;height:64px;border-radius:6px;overflow:hidden;flex-shrink:0;background:var(--surface2)}
+.history-thumb img{width:100%;height:100%;object-fit:cover}
+.history-info{flex:1;min-width:0}
+.history-info .prompt-text{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-info .meta{font-size:12px;color:var(--text3);margin-top:2px}
+.history-card-actions{display:flex;gap:4px;align-items:flex-start}
+.history-card-actions button{font-size:12px;padding:4px 8px;border-radius:4px;background:var(--surface2);color:var(--text2)}
+.history-card-actions button:hover{background:var(--border)}
+.history-empty{padding:24px;text-align:center;color:var(--text3);font-size:14px}
+.alert-box{padding:12px 16px;border-radius:var(--radius-sm);font-size:14px;line-height:1.5}
+.alert-warning{background:#fff3cd;color:#856404;border:1px solid #ffeeba}
+.alert-info{background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb}
+@media(max-width:768px){
+  .main{flex-direction:column}
+  .panel-left{width:100%;min-width:auto;border-right:none;border-bottom:1px solid var(--border);max-height:50vh}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">Image2Html</span>
+  </div>
+  <div class="header-right">
+    <button class="lang-toggle" onclick="toggleLang()" id="langBtn">EN</button>
+    <button class="btn-icon" onclick="openSettings()" title="API Key">&#9881;</button>
+  </div>
+</div>
+<div class="main">
+  <div class="panel-left">
+    <div class="form-group">
+      <label class="form-label" data-i18n="prompt_label">Prompt</label>
+      <textarea class="form-input" id="promptInput" rows="3" data-i18n-placeholder="prompt_placeholder" placeholder="Describe the image you want to generate..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label" data-i18n="ratio_label">Aspect Ratio</label>
+      <select class="form-input" id="sizeSelect">
+        <option value="auto" data-i18n="ratio_auto">Auto</option>
+        <option value="1:1">1:1</option>
+        <option value="3:2">3:2</option>
+        <option value="2:3">2:3</option>
+        <option value="16:9">16:9</option>
+        <option value="9:16">9:16</option>
+        <option value="4:3">4:3</option>
+        <option value="3:4">3:4</option>
+        <option value="21:9">21:9</option>
+        <option value="9:21">9:21</option>
+        <option value="1:3">1:3</option>
+        <option value="3:1">3:1</option>
+        <option value="2:1">2:1</option>
+        <option value="1:2">1:2</option>
+      </select>
+    </div>
+    <div class="ref-section">
+      <div class="ref-header">
+        <label class="form-label" style="margin:0" data-i18n="ref_label">Reference Images</label>
+        <span class="ref-hint" data-i18n="ref_hint">Max 5, drag to reorder</span>
+      </div>
+      <div class="ref-grid" id="refGrid"></div>
+      <div style="margin-top:8px">
+        <label class="form-label" data-i18n="ref_url_label" style="font-size:12px">Or paste image URL:</label>
+        <div class="url-input-row">
+          <input class="form-input" id="refUrlInput" data-i18n-placeholder="ref_url_placeholder" placeholder="https://example.com/image.jpg">
+          <button class="btn-secondary" onclick="addRefUrl()" data-i18n="add">Add</button>
+        </div>
+      </div>
+    </div>
+    <div id="alertArea"></div>
+    <button class="btn-primary" id="generateBtn" onclick="generate()">
+      <span data-i18n="generate">Generate</span>
+    </button>
+    <div class="history-section">
+      <div class="history-header" onclick="toggleHistory()">
+        <h3 data-i18n="history">History</h3>
+        <span class="history-toggle" id="historyToggle">&#9660;</span>
+      </div>
+      <div class="history-body" id="historyBody">
+        <div class="history-list" id="historyList">
+          <div class="history-empty" data-i18n="history_empty">No history yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="panel-right">
+    <div class="result-area" id="resultArea">
+      <div class="result-placeholder" data-i18n="result_placeholder">Generated images will appear here</div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-title" data-i18n="settings_title">Settings</div>
+    <div class="form-group">
+      <label class="form-label" data-i18n="apikey_label">API Key</label>
+      <input class="form-input" id="apiKeyInput" type="password" data-i18n-placeholder="apikey_placeholder" placeholder="Enter your SUCHUANG API key">
+    </div>
+    <div id="apiKeyStatus" style="margin-top:8px;font-size:13px;color:var(--text2)"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeSettings()" data-i18n="cancel">Cancel</button>
+      <button class="btn-primary" style="width:auto" onclick="saveApiKey()" data-i18n="save">Save</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const i18n = {
+  zh: {
+    prompt_label: "\u63d0\u793a\u8bcd",
+    prompt_placeholder: "\u63cf\u8ff0\u4f60\u60f3\u751f\u6210\u7684\u56fe\u7247...",
+    ratio_label: "\u5bbd\u9ad8\u6bd4\u4f8b",
+    ratio_auto: "\u81ea\u52a8",
+    ref_label: "\u53c2\u8003\u56fe\u7247",
+    ref_hint: "\u6700\u591a5\u5f20\uff0c\u62d6\u62fd\u6392\u5e8f",
+    ref_url_label: "\u6216\u7c98\u8d34\u56fe\u7247\u94fe\u63a5\uff1a",
+    ref_url_placeholder: "https://example.com/image.jpg",
+    add: "\u6dfb\u52a0",
+    generate: "\u751f\u6210\u56fe\u7247",
+    generating: "\u751f\u6210\u4e2d...",
+    regen: "\u91cd\u65b0\u751f\u6210",
+    history: "\u5386\u53f2\u8bb0\u5f55",
+    history_empty: "\u6682\u65e0\u5386\u53f2\u8bb0\u5f55",
+    result_placeholder: "\u751f\u6210\u7684\u56fe\u7247\u5c06\u663e\u793a\u5728\u8fd9\u91cc",
+    settings_title: "\u8bbe\u7f6e",
+    apikey_label: "API\u5bc6\u94a5",
+    apikey_placeholder: "\u8f93\u5165\u901f\u521bAPI\u5bc6\u94a5",
+    cancel: "\u53d6\u6d88",
+    save: "\u4fdd\u5b58",
+    saved: "API\u5bc6\u94a5\u5df2\u4fdd\u5b58",
+    key_required: "\u8bf7\u5148\u5728\u8bbe\u7f6e\u4e2d\u914d\u7f6eAPI\u5bc6\u94a5",
+    prompt_required: "\u8bf7\u8f93\u5165\u63d0\u793a\u8bcd",
+    gen_success: "\u4efb\u52a1\u5df2\u63d0\u4ea4\uff0c\u6b63\u5728\u7b49\u5f85\u751f\u6210...",
+    gen_failed: "\u751f\u6210\u5931\u8d25",
+    save_success: "\u56fe\u7247\u5df2\u4fdd\u5b58\u5230\u672c\u5730",
+    save_failed: "\u4fdd\u5b58\u5931\u8d25",
+    delete_confirm: "\u786e\u8ba4\u5220\u9664\u6b64\u8bb0\u5f55\uff1f",
+    ref_limit: "\u6700\u591a5\u5f20\u53c2\u8003\u56fe\u7247",
+    ref_upload_warn: "\u6ce8\u610f\uff1a\u672c\u5730\u4e0a\u4f20\u7684\u56fe\u7247API\u670d\u52a1\u5668\u53ef\u80fd\u65e0\u6cd5\u8bbf\u95ee\u3002\u5982\u751f\u6210\u5931\u8d25\uff0c\u5efa\u8bae\u4f7f\u7528\u56fe\u5e8a\u94fe\u63a5\u3002",
+    copied: "\u5df2\u590d\u5236",
+    poll_timeout: "\u8f6e\u8be2\u8d85\u65f6\uff0c\u8bf7\u91cd\u8bd5",
+    poll_status: "\u6b63\u5728\u751f\u6210\u4e2d... \u7b2c {n} \u6b21\u67e5\u8be2",
+    elapsed_time: "\u5df2\u7b49\u5f85 {t} \u79d2",
+    task_id_label: "\u4efb\u52a1ID",
+    query_task: "\u67e5\u8be2\u7ed3\u679c",
+    querying: "\u67e5\u8be2\u4e2d...",
+    task_id_copied: "\u4efb\u52a1ID\u5df2\u590d\u5236",
+    no_result: "\u8be5\u4efb\u52a1\u6682\u65e0\u7ed3\u679c",
+    still_generating: "\u4efb\u52a1\u4ecd\u5728\u751f\u6210\u4e2d\uff0c\u8bf7\u7a0d\u540e\u518d\u67e5",
+    countdown: "\u8ddd\u4e0b\u6b21\u67e5\u8be2 {s} \u79d2"
+  },
+  en: {
+    prompt_label: "Prompt",
+    prompt_placeholder: "Describe the image you want to generate...",
+    ratio_label: "Aspect Ratio",
+    ratio_auto: "Auto",
+    ref_label: "Reference Images",
+    ref_hint: "Max 5, drag to reorder",
+    ref_url_label: "Or paste image URL:",
+    ref_url_placeholder: "https://example.com/image.jpg",
+    add: "Add",
+    generate: "Generate",
+    generating: "Generating...",
+    regen: "Regenerate",
+    history: "History",
+    history_empty: "No history yet",
+    result_placeholder: "Generated images will appear here",
+    settings_title: "Settings",
+    apikey_label: "API Key",
+    apikey_placeholder: "Enter your SUCHUANG API key",
+    cancel: "Cancel",
+    save: "Save",
+    saved: "API Key saved",
+    key_required: "Please set your API key first",
+    prompt_required: "Please enter a prompt",
+    gen_success: "Task submitted, polling...",
+    gen_failed: "Generation failed",
+    save_success: "Image saved locally",
+    save_failed: "Save failed",
+    delete_confirm: "Delete this record?",
+    ref_limit: "Max 5 reference images",
+    ref_upload_warn: "Note: Locally uploaded images may not be accessible by the API server. If generation fails, try using an image hosting URL instead.",
+    copied: "Copied",
+    poll_timeout: "Polling timeout, please try again",
+    poll_status: "Generating... poll #{n}",
+    elapsed_time: "Waited {t}s",
+    task_id_label: "Task ID",
+    query_task: "Query",
+    querying: "Querying...",
+    task_id_copied: "Task ID copied",
+    no_result: "No result yet",
+    still_generating: "Still generating, try again later",
+    countdown: "Next query in {s}s"
+  }
+};
+
+let currentLang = localStorage.getItem('lang') || 'zh';
+let refImages = [];
+let isGenerating = false;
+
+function t(key) {
+  return (i18n[currentLang] && i18n[currentLang][key]) || key;
+}
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  document.getElementById('langBtn').textContent = currentLang === 'zh' ? 'EN' : 'ZH';
+  document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+}
+
+function toggleLang() {
+  currentLang = currentLang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('lang', currentLang);
+  applyLang();
+}
+
+function showToast(msg, type) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = 'toast toast-' + type + ' show';
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function openSettings() {
+  document.getElementById('settingsModal').classList.add('active');
+  document.getElementById('apiKeyStatus').textContent = '';
+  fetch('/api/config').then(r => r.json()).then(data => {
+    if (data.masked) {
+      document.getElementById('apiKeyStatus').textContent = 'Current: ' + data.masked;
+    }
+  });
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
+
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) return;
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({api_key: key})
+  }).then(r => r.json()).then(data => {
+    if (data.success) {
+      showToast(t('saved'), 'success');
+      closeSettings();
+    } else {
+      showToast(data.error || 'Error', 'error');
+    }
+  });
+}
+
+function renderRefGrid() {
+  const grid = document.getElementById('refGrid');
+  grid.innerHTML = '';
+  refImages.forEach((img, idx) => {
+    const div = document.createElement('div');
+    div.className = 'ref-item';
+    div.draggable = true;
+    div.dataset.idx = idx;
+    div.innerHTML = '<img src="' + img.url + '" alt="ref"><div class="ref-actions">' +
+      (idx > 0 ? '<button class="ref-btn" onclick="moveRef(' + idx + ',-1)">&#8593;</button>' : '') +
+      (idx < refImages.length - 1 ? '<button class="ref-btn" onclick="moveRef(' + idx + ',1)">&#8595;</button>' : '') +
+      '<button class="ref-btn" onclick="removeRef(' + idx + ')">&#10005;</button></div>';
+    div.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', idx));
+    div.addEventListener('dragover', e => e.preventDefault());
+    div.addEventListener('drop', e => {
+      e.preventDefault();
+      const from = parseInt(e.dataTransfer.getData('text/plain'));
+      const to = idx;
+      if (from !== to) {
+        const item = refImages.splice(from, 1)[0];
+        refImages.splice(to, 0, item);
+        renderRefGrid();
+      }
+    });
+    grid.appendChild(div);
+  });
+  if (refImages.length < 5) {
+    const upload = document.createElement('div');
+    upload.className = 'ref-upload';
+    upload.innerHTML = '<span class="ref-upload-icon">+</span><span>' + t('add') + '</span>';
+    upload.onclick = () => document.getElementById('fileInput').click();
+    grid.appendChild(upload);
+  }
+}
+
+function moveRef(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= refImages.length) return;
+  const item = refImages.splice(idx, 1)[0];
+  refImages.splice(newIdx, 0, item);
+  renderRefGrid();
+}
+
+function removeRef(idx) {
+  refImages.splice(idx, 1);
+  renderRefGrid();
+}
+
+function addRefUrl() {
+  const input = document.getElementById('refUrlInput');
+  const url = input.value.trim();
+  if (!url) return;
+  if (refImages.length >= 5) {
+    showToast(t('ref_limit'), 'error');
+    return;
+  }
+  refImages.push({url: url, type: 'url'});
+  input.value = '';
+  renderRefGrid();
+  showRefWarning();
+}
+
+function handleFileUpload(e) {
+  const files = Array.from(e.target.files);
+  files.forEach(file => {
+    if (refImages.length >= 5) {
+      showToast(t('ref_limit'), 'error');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    fetch('/api/upload', {method: 'POST', body: formData})
+      .then(r => r.json())
+      .then(data => {
+        if (data.url) {
+          refImages.push({url: data.url, type: 'local', filename: data.filename});
+          renderRefGrid();
+          showRefWarning();
+        } else {
+          showToast(data.error || 'Upload failed', 'error');
+        }
+      });
+  });
+  e.target.value = '';
+}
+
+function showRefWarning() {
+  const hasLocal = refImages.some(r => r.type === 'local');
+  const area = document.getElementById('alertArea');
+  if (hasLocal) {
+    area.innerHTML = '<div class="alert-box alert-warning">' + t('ref_upload_warn') + '</div>';
+  } else {
+    area.innerHTML = '';
+  }
+}
+
+async function generate() {
+  if (isGenerating) return;
+
+  const prompt = document.getElementById('promptInput').value.trim();
+  if (!prompt) {
+    showToast(t('prompt_required'), 'error');
+    return;
+  }
+
+  const cfgResp = await fetch('/api/config');
+  const cfg = await cfgResp.json();
+  if (!cfg.api_key) {
+    showToast(t('key_required'), 'error');
+    openSettings();
+    return;
+  }
+
+  isGenerating = true;
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  btn.querySelector('span').textContent = t('generating');
+
+  const resultArea = document.getElementById('resultArea');
+  resultArea.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">' + t('generating') + '</div>' +
+    '<div class="progress-wrap"><div class="progress-bar"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div><div class="progress-text" id="progressText"></div></div></div>';
+
+  const urls = refImages.map(r => r.url);
+  const size = document.getElementById('sizeSelect').value;
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt, size, urls})
+    });
+    const data = await resp.json();
+
+    if (!data.success) {
+      showToast(data.error || t('gen_failed'), 'error');
+      resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + (data.error || t('gen_failed')) + '</div>';
+      isGenerating = false;
+      btn.disabled = false;
+      btn.querySelector('span').textContent = t('generate');
+      return;
+    }
+
+    showToast(t('gen_success'), 'info');
+    const taskId = data.task_id;
+
+    // Show task ID in loading area with progress bar
+    resultArea.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">' + t('generating') + '</div>' +
+      '<div style="margin-top:8px;font-size:13px;color:var(--text3);word-break:break-all;text-align:center;max-width:400px">' +
+      t('task_id_label') + ': <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;cursor:pointer;user-select:all" title="' + t('task_id_copied') + '">' + escapeHtml(taskId) + '</code></div>' +
+      '<div class="progress-wrap"><div class="progress-bar"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div><div class="progress-text" id="progressText"></div></div></div>';
+
+    const historyId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+    await fetch('/api/history', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        id: historyId,
+        task_id: taskId,
+        prompt: prompt,
+        size: size,
+        reference_urls: urls,
+        result_urls: [],
+        local_images: [],
+        status: 'pending'
+      })
+    });
+
+    pollTask(taskId, historyId);
+
+  } catch (err) {
+    showToast(t('gen_failed') + ': ' + err.message, 'error');
+    resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + err.message + '</div>';
+    isGenerating = false;
+    btn.disabled = false;
+    btn.querySelector('span').textContent = t('generate');
+  }
+}
+
+async function pollTask(taskId, historyId) {
+  const btn = document.getElementById('generateBtn');
+  const resultArea = document.getElementById('resultArea');
+  let polls = 0;
+  const maxPolls = 30;
+  const POLL_INTERVAL = 24; // seconds between polls
+  const startTime = Date.now();
+  let consecutiveErrors = 0;
+  let countdownTimer = null;   // 倒计时的 setInterval 句柄
+  let stopped = false;          // 是否已结束
+
+  function updateProgress(remainingSec) {
+    const fill = document.getElementById('progressFill');
+    const text = document.getElementById('progressText');
+    if (!fill || !text) return;
+    const pct = ((POLL_INTERVAL - remainingSec) / POLL_INTERVAL) * 100;
+    fill.style.width = pct + '%';
+    if (remainingSec > 0) {
+      text.textContent = t('countdown').replace('{s}', remainingSec);
+    } else {
+      text.textContent = '';
+    }
+  }
+
+  function updateStatusLine() {
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    const textEl = resultArea.querySelector('.loading-text');
+    if (textEl) textEl.textContent = t('poll_status').replace('{n}', polls) + ' — ' + t('elapsed_time').replace('{t}', elapsed);
+  }
+
+  async function doPoll() {
+    if (stopped) return;
+    polls++;
+    if (polls > maxPolls) {
+      showToast(t('poll_timeout'), 'error');
+      resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + t('poll_timeout') + '</div>';
+      isGenerating = false;
+      btn.disabled = false;
+      btn.querySelector('span').textContent = t('generate');
+      stopped = true;
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api/task/' + taskId);
+      if (!resp.ok) {
+        consecutiveErrors++;
+        if (consecutiveErrors > 5) {
+          showToast(t('gen_failed') + ' (HTTP ' + resp.status + ')', 'error');
+          resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + t('gen_failed') + ' (HTTP ' + resp.status + ')</div>';
+          isGenerating = false;
+          btn.disabled = false;
+          btn.querySelector('span').textContent = t('generate');
+          stopped = true;
+        }
+        return;
+      }
+
+      const data = await resp.json();
+      consecutiveErrors = 0;
+
+      if (data.error) {
+        showToast(t('gen_failed') + ': ' + data.error, 'error');
+        resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + escapeHtml(data.error) + '</div>';
+        isGenerating = false;
+        btn.disabled = false;
+        btn.querySelector('span').textContent = t('generate');
+        stopped = true;
+        await fetch('/api/history/' + historyId, { method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({status: 'failed'}) });
+        return;
+      }
+
+      if (data.status == 2) {
+        const resultUrls = data.result_urls || [];
+        displayResults(resultUrls, taskId);
+        await fetch('/api/history/' + historyId, { method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({result_urls: resultUrls, status: 'success'}) });
+        showToast(t('gen_success'), 'success');
+        isGenerating = false;
+        btn.disabled = false;
+        btn.querySelector('span').textContent = t('generate');
+        loadHistory();
+        stopped = true;
+        return;
+
+      } else if (data.status != 1 && data.status != 0) {
+        const errMsg = data.message || ('Status code: ' + data.status);
+        showToast(t('gen_failed') + ': ' + errMsg, 'error');
+        resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + t('gen_failed') + ': ' + escapeHtml(errMsg) + '</div>';
+        isGenerating = false;
+        btn.disabled = false;
+        btn.querySelector('span').textContent = t('generate');
+        stopped = true;
+        await fetch('/api/history/' + historyId, { method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({status: 'failed', result_urls: []}) });
+        return;
+      }
+
+      // Still generating — update status line
+      updateStatusLine();
+
+      // Start 24s countdown for next poll
+      let remaining = POLL_INTERVAL;
+      updateProgress(remaining);
+      countdownTimer = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+          doPoll();
+        } else {
+          updateProgress(remaining);
+        }
+      }, 1000);
+
+    } catch (err) {
+      consecutiveErrors++;
+      console.error('Poll error:', err);
+      if (consecutiveErrors > 5) {
+        showToast(t('gen_failed') + ': ' + err.message, 'error');
+        resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + t('gen_failed') + '</div>';
+        isGenerating = false;
+        btn.disabled = false;
+        btn.querySelector('span').textContent = t('generate');
+        stopped = true;
+      }
+    }
+  }
+
+  // Start: do first poll immediately (no countdown before first poll)
+  doPoll();
+}
+
+function displayResults(urls, taskId) {
+  const resultArea = document.getElementById('resultArea');
+  if (!urls || urls.length === 0) {
+    resultArea.innerHTML = '<div class="result-placeholder">' + t('result_placeholder') + '</div>';
+    return;
+  }
+  let html = '';
+  if (taskId) {
+    html += '<div style="margin-bottom:12px;font-size:13px;color:var(--text3);text-align:center">' +
+      t('task_id_label') + ': <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;cursor:pointer;user-select:all" onclick="copyTaskId(\'' + taskId + '\')">' + escapeHtml(taskId) + '</code></div>';
+  }
+  html += '<div class="result-images">';
+  urls.forEach(url => {
+    html += '<div class="result-img-card"><img src="' + url + '" alt="Generated" loading="lazy"><div class="result-img-actions">' +
+      '<button class="btn-secondary" onclick="saveImageLocally(\'' + url.replace(/'/g, "\\'") + '\')">&#128190; ' + t('save') + '</button>' +
+      '</div></div>';
+  });
+  html += '</div>';
+  html += '<button class="btn-secondary" style="margin-top:12px" onclick="generate()">&#x1F504; ' + t('regen') + '</button>';
+  resultArea.innerHTML = html;
+}
+
+async function saveImageLocally(url) {
+  try {
+    const resp = await fetch('/api/save-image', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url: url})
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(t('save_success'), 'success');
+      const link = document.createElement('a');
+      link.href = '/' + data.local_url;
+      link.download = data.filename;
+      link.click();
+    } else {
+      showToast(data.error || t('save_failed'), 'error');
+    }
+  } catch (err) {
+    showToast(t('save_failed'), 'error');
+  }
+}
+
+function copyTaskId(taskId) {
+  navigator.clipboard.writeText(taskId).then(() => {
+    showToast(t('task_id_copied'), 'success');
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = taskId;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(t('task_id_copied'), 'success');
+  });
+}
+
+async function queryByTaskId(taskId) {
+  const resultArea = document.getElementById('resultArea');
+  resultArea.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">' + t('querying') + '</div>' +
+    '<div style="margin-top:8px;font-size:13px;color:var(--text3)">' + t('task_id_label') + ': ' + escapeHtml(taskId) + '</div></div>';
+
+  try {
+    const resp = await fetch('/api/task/' + taskId);
+    const data = await resp.json();
+
+    if (data.error) {
+      resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + escapeHtml(data.error) + '</div>';
+      showToast(t('gen_failed') + ': ' + data.error, 'error');
+      return;
+    }
+
+    // status: 0=queued, 1=generating, 2=success
+    if (data.status == 2) {
+      const resultUrls = data.result_urls || [];
+      if (resultUrls.length > 0) {
+        displayResults(resultUrls, taskId);
+        showToast(t('gen_success'), 'success');
+      } else {
+        resultArea.innerHTML = '<div class="result-placeholder">' + t('no_result') + '</div>';
+        showToast(t('no_result'), 'info');
+      }
+    } else if (data.status == 1 || data.status == 0) {
+      resultArea.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">' + t('still_generating') + '</div>' +
+        '<div style="margin-top:8px;font-size:13px;color:var(--text3)">' + t('task_id_label') + ': <code style="cursor:pointer;user-select:all" onclick="copyTaskId(\'' + taskId + '\')">' + escapeHtml(taskId) + '</code></div>' +
+        '<button class="btn-secondary" style="margin-top:12px" onclick="queryByTaskId(\'' + taskId + '\')">&#x1F504; ' + t('query_task') + '</button></div>';
+      showToast(t('still_generating'), 'info');
+    } else {
+      resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + t('gen_failed') + ' (status: ' + data.status + ')</div>';
+      showToast(t('gen_failed'), 'error');
+    }
+  } catch (err) {
+    resultArea.innerHTML = '<div class="result-placeholder" style="color:var(--danger)">' + escapeHtml(err.message) + '</div>';
+    showToast(t('gen_failed') + ': ' + err.message, 'error');
+  }
+}
+
+function toggleHistory() {
+  const body = document.getElementById('historyBody');
+  const toggle = document.getElementById('historyToggle');
+  body.classList.toggle('open');
+  toggle.classList.toggle('open');
+  if (body.classList.contains('open')) {
+    loadHistory();
+  }
+}
+
+async function loadHistory() {
+  try {
+    const resp = await fetch('/api/history');
+    const data = await resp.json();
+    const list = document.getElementById('historyList');
+    const records = data.records || [];
+
+    if (records.length === 0) {
+      list.innerHTML = '<div class="history-empty">' + t('history_empty') + '</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    records.forEach(rec => {
+      const card = document.createElement('div');
+      card.className = 'history-card';
+      const hasResults = rec.result_urls && rec.result_urls.length > 0;
+      const thumbUrl = hasResults ? rec.result_urls[0] : '';
+      const thumbHtml = thumbUrl ? '<img src="' + thumbUrl + '" alt="">' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:22px">&#128247;</div>';
+      const shortTaskId = rec.task_id ? (rec.task_id.length > 30 ? rec.task_id.substring(0, 28) + '...' : rec.task_id) : '';
+      card.innerHTML = '<div class="history-thumb">' + thumbHtml + '</div>' +
+        '<div class="history-info">' +
+        '<div class="prompt-text">' + escapeHtml(rec.prompt || '') + '</div>' +
+        (shortTaskId ? '<div class="meta" style="font-family:monospace;cursor:pointer" onclick="event.stopPropagation();copyTaskId(\'' + rec.task_id + '\')" title="' + t('task_id_copied') + '">' + escapeHtml(shortTaskId) + '</div>' : '') +
+        '<div class="meta">' + (rec.created_at || '') + ' | ' + (rec.size || 'auto') + ' | ' + (rec.status || '') + '</div>' +
+        '</div>' +
+        '<div class="history-card-actions">' +
+        '<button onclick="event.stopPropagation();queryByTaskId(\'' + rec.task_id + '\')" title="' + t('query_task') + '">&#128269;</button>' +
+        '<button onclick="deleteHistory(event, \'' + rec.id + '\')">&#10005;</button>' +
+        '</div>';
+      card.onclick = (e) => {
+        if (e.target.closest('.history-card-actions')) return;
+        queryByTaskId(rec.task_id);
+      };
+      list.appendChild(card);
+    });
+  } catch (err) {
+  }
+}
+
+function deleteHistory(e, id) {
+  e.stopPropagation();
+  if (!confirm(t('delete_confirm'))) return;
+  fetch('/api/history/' + id, {method: 'DELETE'}).then(() => {
+    loadHistory();
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  applyLang();
+  renderRefGrid();
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.id = 'fileInput';
+  fileInput.accept = 'image/*';
+  fileInput.multiple = true;
+  fileInput.style.display = 'none';
+  fileInput.onchange = handleFileUpload;
+  document.body.appendChild(fileInput);
+
+  document.getElementById('settingsModal').onclick = (e) => {
+    if (e.target.classList.contains('modal-overlay')) closeSettings();
+  };
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# 用户数据（含API密钥）
+data/
+
+# 上传和生成的图片
+uploads/
+outputs/
+
+# PyInstaller 打包产物
+dist/
+build/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# 系统文件
+Thumbs.db
+.DS_Store
