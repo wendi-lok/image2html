@@ -113,6 +113,22 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .alert-box{padding:12px 16px;border-radius:var(--radius-sm);font-size:14px;line-height:1.5}
 .alert-warning{background:#fff3cd;color:#856404;border:1px solid #ffeeba}
 .alert-info{background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb}
+/* ==== 拖拽 / 粘贴上传 ==== */
+.drop-overlay{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;background:rgba(0,113,227,.10);backdrop-filter:blur(3px);pointer-events:none}
+.drop-overlay.active{display:flex}
+.drop-overlay-card{background:var(--surface);border:2px dashed var(--accent);border-radius:var(--radius);padding:26px 44px;text-align:center;color:var(--accent);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.drop-overlay-icon{font-size:34px;line-height:1}
+.drop-overlay-text{font-size:16px;font-weight:600;margin-top:6px}
+.ref-item.is-uploading{pointer-events:none}
+.ref-item.is-uploading img{opacity:.3}
+.ref-spinner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.ref-spinner i{width:20px;height:20px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:block;animation:spin .8s linear infinite}
+.ref-item.is-failed{border-color:var(--danger)}
+.ref-badge{position:absolute;left:3px;bottom:3px;max-width:calc(100% - 6px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.7;padding:0 5px;border-radius:4px;background:rgba(0,0,0,.62);color:#fff}
+.ref-badge.is-local{background:rgba(255,59,48,.85)}
+.ref-section.dragover{border-color:var(--accent);background:rgba(0,113,227,.06)}
+.form-hint{font-size:12px;color:var(--text3);line-height:1.55}
+.form-hint a{text-decoration:underline}
 @media(max-width:768px){
   .main{flex-direction:column}
   .panel-left{width:100%;min-width:auto;border-right:none;border-bottom:1px solid var(--border);max-height:50vh}
@@ -155,12 +171,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <option value="1:2">1:2</option>
       </select>
     </div>
-    <div class="ref-section">
+    <div class="ref-section" id="refSection">
       <div class="ref-header">
         <label class="form-label" style="margin:0" data-i18n="ref_label">Reference Images</label>
         <span class="ref-hint" data-i18n="ref_hint">Max 5, drag to reorder</span>
       </div>
       <div class="ref-grid" id="refGrid"></div>
+      <div class="form-hint" style="margin-top:8px" data-i18n="ref_drop_hint">把图片直接拖到这里，或按 Ctrl+V 粘贴</div>
       <div style="margin-top:8px">
         <label class="form-label" data-i18n="ref_url_label" style="font-size:12px">Or paste image URL:</label>
         <div class="url-input-row">
@@ -199,10 +216,29 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <input class="form-input" id="apiKeyInput" type="password" data-i18n-placeholder="apikey_placeholder" placeholder="Enter your SUCHUANG API key">
     </div>
     <div id="apiKeyStatus" style="margin-top:8px;font-size:13px;color:var(--text2)"></div>
+
+    <div class="form-group" style="margin-top:18px">
+      <label class="form-label" data-i18n="host_label">参考图图床</label>
+      <select class="form-input" id="hostSelect" onchange="onHostChange()"></select>
+      <div class="form-hint" id="hostTip" style="margin-top:6px"></div>
+    </div>
+    <div class="form-group" id="hostTokenGroup" style="margin-top:12px">
+      <label class="form-label" data-i18n="host_token_label">图床 Token / API Key（可选）</label>
+      <input class="form-input" id="hostTokenInput" type="password" data-i18n-placeholder="host_token_placeholder" placeholder="留空则使用免注册额度">
+      <input class="form-input" id="hostUidInput" type="text" placeholder="ImgURL UID" style="margin-top:6px;display:none">
+      <div class="form-hint" id="hostTokenStatus" style="margin-top:6px"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSettings()" data-i18n="cancel">Cancel</button>
       <button class="btn-primary" style="width:auto" onclick="saveApiKey()" data-i18n="save">Save</button>
     </div>
+  </div>
+</div>
+<div class="drop-overlay" id="dropOverlay">
+  <div class="drop-overlay-card">
+    <div class="drop-overlay-icon">&#8681;</div>
+    <div class="drop-overlay-text" data-i18n="drop_hint">松开鼠标即可上传参考图</div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -250,7 +286,23 @@ const i18n = {
     task_id_copied: "\u4efb\u52a1ID\u5df2\u590d\u5236",
     no_result: "\u8be5\u4efb\u52a1\u6682\u65e0\u7ed3\u679c",
     still_generating: "\u4efb\u52a1\u4ecd\u5728\u751f\u6210\u4e2d\uff0c\u8bf7\u7a0d\u540e\u518d\u67e5",
-    countdown: "\u8ddd\u4e0b\u6b21\u67e5\u8be2 {s} \u79d2"
+    countdown: "\u8ddd\u4e0b\u6b21\u67e5\u8be2 {s} \u79d2",
+    ref_drop_hint: "\u628a\u56fe\u7247\u76f4\u63a5\u62d6\u5230\u8fd9\u91cc\uff0c\u6216\u6309 Ctrl+V \u7c98\u8d34",
+    drop_hint: "\u677e\u5f00\u9f20\u6807\u5373\u53ef\u4e0a\u4f20\u53c2\u8003\u56fe",
+    host_label: "\u53c2\u8003\u56fe\u56fe\u5e8a",
+    host_token_label: "\u56fe\u5e8a Token / API Key\uff08\u53ef\u9009\uff09",
+    host_token_placeholder: "\u7559\u7a7a\u5219\u4f7f\u7528\u514d\u6ce8\u518c\u989d\u5ea6",
+    host_need_token: "\u8be5\u56fe\u5e8a\u9700\u8981\u586b\u5199 Token / API Key",
+    host_saved_token: "\u5df2\u4fdd\u5b58\uff1a{t}\uff08\u7559\u7a7a\u5219\u4e0d\u4fee\u6539\uff09",
+    uploading: "\u4e0a\u4f20\u4e2d...",
+    upload_failed: "\u4e0a\u4f20\u5931\u8d25",
+    upload_success: "\u53c2\u8003\u56fe\u5df2\u4e0a\u4f20",
+    upload_to: "\u5df2\u4e0a\u4f20\u5230",
+    only_image: "\u53ea\u80fd\u4e0a\u4f20\u56fe\u7247\u6587\u4ef6",
+    local_fallback: "\u56fe\u5e8a\u4e0d\u53ef\u7528\uff0c\u5df2\u7528\u672c\u5730\u5730\u5740\uff08\u901f\u521b\u670d\u52a1\u5668\u53ef\u80fd\u6293\u4e0d\u5230\uff09",
+    temp_host_warn: "\u5f53\u524d\u7528\u7684\u662f\u4e34\u65f6\u56fe\u5e8a\uff0c\u94fe\u63a5\u7ea6 3 \u5c0f\u65f6\u540e\u5931\u6548",
+    need_api_key: "\u8bf7\u5148\u586b\u5199\u901f\u521b API \u5bc6\u94a5",
+    upload_wait: "\u53c2\u8003\u56fe\u4e0a\u4f20\u4e2d\uff0c\u8bf7\u7a0d\u7b49"
   },
   en: {
     prompt_label: "Prompt",
@@ -293,13 +345,33 @@ const i18n = {
     task_id_copied: "Task ID copied",
     no_result: "No result yet",
     still_generating: "Still generating, try again later",
-    countdown: "Next query in {s}s"
+    countdown: "Next query in {s}s",
+    ref_drop_hint: "Drop images here, or press Ctrl+V to paste",
+    drop_hint: "Release to upload reference images",
+    host_label: "Image Host",
+    host_token_label: "Host Token / API Key (optional)",
+    host_token_placeholder: "Leave empty to use the anonymous quota",
+    host_need_token: "This host requires a Token / API Key",
+    host_saved_token: "Saved: {t} (leave empty to keep it)",
+    uploading: "Uploading...",
+    upload_failed: "Upload failed",
+    upload_success: "Reference image uploaded",
+    upload_to: "Uploaded to",
+    only_image: "Only image files are supported",
+    local_fallback: "No image host available, using a local URL (the API server may not reach it)",
+    temp_host_warn: "Using a temporary host; the link expires in about 3 hours",
+    need_api_key: "Please enter your Suchuang API key first",
+    upload_wait: "Reference images are still uploading, please wait"
   }
 };
 
 let currentLang = localStorage.getItem('lang') || 'zh';
 let refImages = [];
 let isGenerating = false;
+let pendingUploads = 0;      // 正在上传的参考图数量，避免并发突破 5 张上限
+let hostOptions = [];        // 后端返回的图床列表
+let savedHostToken = '';     // 已保存的图床 Token（脱敏），仅用于提示
+let savedHasApiKey = false;
 
 function t(key) {
   return (i18n[currentLang] && i18n[currentLang][key]) || key;
@@ -329,13 +401,51 @@ function showToast(msg, type) {
   setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
+/* ---------------- 设置：速创 API Key + 图床 ---------------- */
+
+function renderHostOptions(current) {
+  const sel = document.getElementById('hostSelect');
+  sel.innerHTML = '';
+  hostOptions.forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt.key;
+    o.textContent = opt.name + (opt.need && opt.need !== 'none' ? ' — 需要 ' + opt.need : '');
+    sel.appendChild(o);
+  });
+  sel.value = current || 'auto';
+}
+
+function onHostChange() {
+  const key = document.getElementById('hostSelect').value;
+  const opt = hostOptions.find(o => o.key === key) || {};
+  const tip = document.getElementById('hostTip');
+  tip.innerHTML = opt.tip
+    ? opt.tip.replace(/(https?:\/\/[^\s，（）]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+    : '';
+  const needToken = opt.need && opt.need !== 'none';
+  document.getElementById('hostTokenGroup').style.display = (key === 'local') ? 'none' : '';
+  document.getElementById('hostUidInput').style.display = (key === 'imgurl') ? '' : 'none';
+  if (needToken && !savedHostToken) {
+    document.getElementById('hostTokenStatus').textContent = t('host_need_token');
+  }
+}
+
 function openSettings() {
   document.getElementById('settingsModal').classList.add('active');
   document.getElementById('apiKeyStatus').textContent = '';
   fetch('/api/config').then(r => r.json()).then(data => {
+    savedHasApiKey = !!data.api_key;
     if (data.masked) {
       document.getElementById('apiKeyStatus').textContent = 'Current: ' + data.masked;
     }
+    hostOptions = data.host_options || [];
+    savedHostToken = data.host_token_masked || '';
+    renderHostOptions(data.image_host);
+    document.getElementById('hostUidInput').value = data.host_uid || '';
+    document.getElementById('hostTokenStatus').textContent = savedHostToken
+      ? t('host_saved_token').replace('{t}', savedHostToken)
+      : '';
+    onHostChange();
   });
 }
 
@@ -345,40 +455,85 @@ function closeSettings() {
 
 function saveApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key) return;
+  const host = document.getElementById('hostSelect').value;
+  const token = document.getElementById('hostTokenInput').value.trim();
+  const uid = document.getElementById('hostUidInput').value.trim();
+
+  if (!key && !savedHasApiKey) {
+    showToast(t('need_api_key'), 'error');
+    return;
+  }
+
+  const payload = { image_host: host, host_uid: uid };
+  if (key) payload.api_key = key;
+  if (token) payload.host_token = token;
+
   fetch('/api/config', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({api_key: key})
+    body: JSON.stringify(payload)
   }).then(r => r.json()).then(data => {
     if (data.success) {
       showToast(t('saved'), 'success');
+      if (key) savedHasApiKey = true;
+      if (token) savedHostToken = data.host_token_masked || '';
+      document.getElementById('hostTokenInput').value = '';
+      document.getElementById('apiKeyInput').value = '';
       closeSettings();
     } else {
       showToast(data.error || 'Error', 'error');
     }
-  });
+  }).catch(err => showToast(err.message, 'error'));
 }
+
+/* ---------------- 参考图：点击 / 拖拽 / 粘贴上传 ---------------- */
 
 function renderRefGrid() {
   const grid = document.getElementById('refGrid');
   grid.innerHTML = '';
   refImages.forEach((img, idx) => {
     const div = document.createElement('div');
-    div.className = 'ref-item';
-    div.draggable = true;
+    div.className = 'ref-item' + (img.type === 'uploading' ? ' is-uploading' : '') +
+      (img.type === 'failed' ? ' is-failed' : '');
+    div.draggable = img.type !== 'uploading';
     div.dataset.idx = idx;
-    div.innerHTML = '<img src="' + img.url + '" alt="ref"><div class="ref-actions">' +
+
+    const badge = img.type === 'uploading'
+      ? ''
+      : '<span class="ref-badge' + (img.public ? '' : ' is-local') + '">' +
+        (img.public ? escapeHtml(img.hostName || 'host') : 'local') + '</span>';
+
+    div.innerHTML = '<img src="' + (img.preview || img.url) + '" alt="ref">' +
+      (img.type === 'uploading' ? '<div class="ref-spinner"><i></i></div>' : '') +
+      badge +
+      '<div class="ref-actions">' +
       (idx > 0 ? '<button class="ref-btn" onclick="moveRef(' + idx + ',-1)">&#8593;</button>' : '') +
       (idx < refImages.length - 1 ? '<button class="ref-btn" onclick="moveRef(' + idx + ',1)">&#8595;</button>' : '') +
       '<button class="ref-btn" onclick="removeRef(' + idx + ')">&#10005;</button></div>';
-    div.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', idx));
-    div.addEventListener('dragover', e => e.preventDefault());
+
+    // 排序拖拽（只用 text/plain，和文件拖拽区分开）
+    div.addEventListener('dragstart', e => {
+      if (img.type === 'uploading') { e.preventDefault(); return; }
+      e.dataTransfer.setData('text/plain', String(idx));
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    div.addEventListener('dragover', e => {
+      // 拖文件进来时交给上传逻辑，不要当成排序
+      if (isFileDrag(e)) { e.preventDefault(); e.stopPropagation(); return; }
+      e.preventDefault();
+    });
     div.addEventListener('drop', e => {
+      if (isFileDrag(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideDropOverlay();
+        handleFiles(e.dataTransfer.files);
+        return;
+      }
       e.preventDefault();
       const from = parseInt(e.dataTransfer.getData('text/plain'));
       const to = idx;
-      if (from !== to) {
+      if (!isNaN(from) && from !== to) {
         const item = refImages.splice(from, 1)[0];
         refImages.splice(to, 0, item);
         renderRefGrid();
@@ -386,7 +541,7 @@ function renderRefGrid() {
     });
     grid.appendChild(div);
   });
-  if (refImages.length < 5) {
+  if (refImages.length + pendingUploads < 5) {
     const upload = document.createElement('div');
     upload.className = 'ref-upload';
     upload.innerHTML = '<span class="ref-upload-icon">+</span><span>' + t('add') + '</span>';
@@ -404,56 +559,175 @@ function moveRef(idx, dir) {
 }
 
 function removeRef(idx) {
+  const item = refImages[idx];
+  if (item && item.preview) URL.revokeObjectURL(item.preview);
   refImages.splice(idx, 1);
   renderRefGrid();
+  showRefWarning();
 }
 
 function addRefUrl() {
   const input = document.getElementById('refUrlInput');
   const url = input.value.trim();
   if (!url) return;
-  if (refImages.length >= 5) {
+  if (refImages.length + pendingUploads >= 5) {
     showToast(t('ref_limit'), 'error');
     return;
   }
-  refImages.push({url: url, type: 'url'});
+  refImages.push({url: url, type: 'url', public: true, hostName: 'URL'});
   input.value = '';
   renderRefGrid();
-  showRefWarning();
 }
 
 function handleFileUpload(e) {
-  const files = Array.from(e.target.files);
-  files.forEach(file => {
-    if (refImages.length >= 5) {
-      showToast(t('ref_limit'), 'error');
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', file);
-    fetch('/api/upload', {method: 'POST', body: formData})
-      .then(r => r.json())
-      .then(data => {
-        if (data.url) {
-          refImages.push({url: data.url, type: 'local', filename: data.filename});
-          renderRefGrid();
-          showRefWarning();
-        } else {
-          showToast(data.error || 'Upload failed', 'error');
-        }
-      });
-  });
+  handleFiles(e.target.files);
   e.target.value = '';
 }
 
+/** 统一的文件入口：点击选择、拖拽、粘贴都走这里 */
+function handleFiles(list) {
+  const files = Array.from(list || []).filter(f => f.type && f.type.indexOf('image/') === 0);
+  if (!files.length) {
+    showToast(t('only_image'), 'error');
+    return;
+  }
+  let skipped = 0;
+  files.forEach(file => {
+    if (refImages.length + pendingUploads >= 5) { skipped++; return; }
+    uploadOne(file);
+  });
+  if (skipped) showToast(t('ref_limit'), 'error');
+}
+
+/** 上传单张参考图，并在网格里占位显示进度 */
+function uploadOne(file) {
+  const placeholder = {
+    url: '',
+    type: 'uploading',
+    preview: URL.createObjectURL(file),
+    name: file.name
+  };
+  refImages.push(placeholder);
+  pendingUploads++;
+  renderRefGrid();
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  fetch('/api/upload', {method: 'POST', body: formData})
+    .then(r => r.json())
+    .then(data => {
+      pendingUploads--;
+      const idx = refImages.indexOf(placeholder);
+      if (idx === -1) { if (placeholder.preview) URL.revokeObjectURL(placeholder.preview); return; }
+      if (!data.url || data.error) {
+        refImages.splice(idx, 1);
+        if (placeholder.preview) URL.revokeObjectURL(placeholder.preview);
+        showToast((data.error || t('upload_failed')) + (data.errors ? '：' + data.errors.join('；') : ''), 'error');
+      } else {
+        placeholder.url = data.url;
+        placeholder.type = data.public ? 'file' : 'local';
+        placeholder.filename = data.filename;
+        placeholder.public = !!data.public;
+        placeholder.hostName = data.host_name || '';
+        placeholder.host = data.host || '';
+        showToast(t('upload_success') + (data.public ? ' · ' + t('upload_to') + ' ' + (data.host_name || '') : ''), data.public ? 'success' : 'error');
+        if (data.warning) console.warn('[upload]', data.warning, data.errors || []);
+      }
+      renderRefGrid();
+      showRefWarning();
+    })
+    .catch(err => {
+      pendingUploads--;
+      const idx = refImages.indexOf(placeholder);
+      if (idx !== -1) refImages.splice(idx, 1);
+      if (placeholder.preview) URL.revokeObjectURL(placeholder.preview);
+      renderRefGrid();
+      showToast(t('upload_failed') + ': ' + err.message, 'error');
+    });
+}
+
+/** 提示：哪些参考图没用上图床（速创服务器抓不到） */
 function showRefWarning() {
-  const hasLocal = refImages.some(r => r.type === 'local');
   const area = document.getElementById('alertArea');
-  if (hasLocal) {
-    area.innerHTML = '<div class="alert-box alert-warning">' + t('ref_upload_warn') + '</div>';
+  const notPublic = refImages.filter(r => r.type !== 'uploading' && r.url && !r.public);
+  const tempHost = refImages.some(r => r.host === 'uguu' || r.host === 'telegraph');
+  if (notPublic.length) {
+    area.innerHTML = '<div class="alert-box alert-warning">' + t('local_fallback') + '</div>';
+  } else if (tempHost) {
+    area.innerHTML = '<div class="alert-box alert-warning">' + t('temp_host_warn') + '</div>';
   } else {
     area.innerHTML = '';
   }
+}
+
+/* ---------------- 拖拽 / 粘贴 ---------------- */
+
+let dragDepth = 0;
+
+function isFileDrag(e) {
+  const dt = e && e.dataTransfer;
+  if (!dt) return false;
+  if (dt.types && Array.prototype.indexOf.call(dt.types, 'Files') !== -1) return true;
+  return !!(dt.files && dt.files.length);
+}
+
+function showDropOverlay() {
+  const el = document.getElementById('dropOverlay');
+  if (el) el.classList.add('active');
+  const section = document.getElementById('refSection');
+  if (section) section.classList.add('dragover');
+}
+
+function hideDropOverlay() {
+  dragDepth = 0;
+  const el = document.getElementById('dropOverlay');
+  if (el) el.classList.remove('active');
+  const section = document.getElementById('refSection');
+  if (section) section.classList.remove('dragover');
+}
+
+function initDropZone() {
+  document.addEventListener('dragenter', e => {
+    if (!isFileDrag(e)) return;
+    dragDepth++;
+    showDropOverlay();
+  });
+  document.addEventListener('dragover', e => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  document.addEventListener('dragleave', e => {
+    if (!isFileDrag(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) hideDropOverlay();
+  });
+  document.addEventListener('drop', e => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    hideDropOverlay();
+    handleFiles(e.dataTransfer.files);
+  });
+  window.addEventListener('blur', hideDropOverlay);
+
+  // Ctrl+V 粘贴截图
+  document.addEventListener('paste', e => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === 'file' && it.type && it.type.indexOf('image/') === 0) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      handleFiles(files);
+    }
+  });
 }
 
 async function generate() {
@@ -462,6 +736,11 @@ async function generate() {
   const prompt = document.getElementById('promptInput').value.trim();
   if (!prompt) {
     showToast(t('prompt_required'), 'error');
+    return;
+  }
+
+  if (pendingUploads > 0) {
+    showToast(t('upload_wait'), 'error');
     return;
   }
 
@@ -482,7 +761,7 @@ async function generate() {
   resultArea.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">' + t('generating') + '</div>' +
     '<div class="progress-wrap"><div class="progress-bar"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div><div class="progress-text" id="progressText"></div></div></div>';
 
-  const urls = refImages.map(r => r.url);
+  const urls = refImages.filter(r => r.url).map(r => r.url);
   const size = document.getElementById('sizeSelect').value;
 
   try {
@@ -844,6 +1123,7 @@ function escapeHtml(str) {
 document.addEventListener('DOMContentLoaded', () => {
   applyLang();
   renderRefGrid();
+  initDropZone();
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';

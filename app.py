@@ -3,6 +3,8 @@ import sys
 import json
 import uuid
 import time
+import base64
+import socket
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -85,6 +87,282 @@ def http_request(url, method='GET', data=None, headers=None, timeout=30):
         return e.code, e.read(), dict(e.headers)
     except Exception as e:
         raise
+
+
+# =====================================================================
+# 图床模块 —— 把本地参考图转成公网可访问 URL
+#
+# 速创 API 的 urls 参数只接受公网 URL，本地 http://localhost/... 它抓不到，
+# 所以本地上传的图片必须先传到图床。免费的匿名图床 API 这两年基本都关掉了
+# （sm.ms 需 token、ImgURL 需 uid+token、cdnjson 需 key、0x0.st 已停服），
+# 因此这里做成「适配器链」：按顺序逐个尝试，谁先成功就用谁，
+# 全部失败再回退成原来的本地 URL，保证功能不会整体挂掉。
+# =====================================================================
+
+# 适配器：key -> 元信息
+# need     需要用户额外配置什么（none = 免注册直接可用）
+# timeout  单次请求超时（免注册的兜底图床给短一点，避免整体太慢）
+IMAGE_HOSTS = {
+    'uapis':     {'name': 'UAPI',      'need': 'none',      'tip': 'uapis.cn 国内图床，免注册即可用（访客每日 10 张；填 Key 可不限量）',
+                  'timeout': 30},
+    'picui':     {'name': 'PicUI',     'need': 'token',     'tip': 'https://picui.cn 注册后在「个人设置」取 Token（国内图床，更稳定）',
+                  'timeout': 60},
+    'smms':      {'name': 'SM.MS',     'need': 'token',     'tip': 'https://sm.ms 注册后在 Dashboard 取 API Token（接口已迁移到 s.ee）',
+                  'timeout': 60},
+    'imgurl':    {'name': 'ImgURL',    'need': 'uid+token', 'tip': 'https://www.imgurl.org 注册后在个人中心取 UID 与 Token',
+                  'timeout': 60},
+    'imgbb':     {'name': 'ImgBB',     'need': 'token',     'tip': 'https://api.imgbb.com 免费申请 API Key',
+                  'timeout': 60},
+    'catbox':    {'name': 'Catbox',    'need': 'none',      'tip': '免注册，永久保存（海外）',
+                  'timeout': 20},
+    'uguu':      {'name': 'Uguu',      'need': 'none',      'tip': '免注册，但链接仅保留约 3 小时（海外）',
+                  'timeout': 20},
+    'telegraph': {'name': 'Telegraph', 'need': 'none',      'tip': '免注册（海外，部分国内网络不可达）',
+                  'timeout': 20},
+}
+
+# 自动模式下的尝试顺序：先试免注册的国内图床，再试已配置凭据的，
+# 最后才用海外兜底（海外图床国内直连不稳，速创服务器也可能抓不到）
+AUTO_ORDER = ['uapis', 'picui', 'smms', 'imgurl', 'imgbb', 'catbox', 'uguu', 'telegraph']
+
+HOST_CHOICES = ['auto', 'local'] + AUTO_ORDER
+
+AUTO_TIP = ('自动模式：按顺序尝试可用图床，第一张成功即用。免注册的 UAPI 默认可用；'
+            '填了 Token 的图床会被优先尝试。全部失败才退回本地地址。')
+LOCAL_TIP = '仅本地：不上传图床。参考图会以本地地址提交，速创服务器通常抓不到，只建议在调试时使用。'
+
+
+def host_ready(key, cfg):
+    """当前配置是否满足调用该图床的条件（免注册图床恒为 True）"""
+    need = IMAGE_HOSTS.get(key, {}).get('need')
+    if need == 'none':
+        return True
+    token = (cfg.get('host_token') or '').strip()
+    if need == 'token':
+        return bool(token)
+    if need == 'uid+token':
+        return bool(token)
+    return False
+
+
+def encode_multipart(fields, files, boundary=None):
+    """构造 multipart/form-data 请求体。标准库没有现成实现，自己拼。
+
+    fields: dict[str, str]
+    files:  list[tuple[name, filename, bytes]]
+    返回 (body_bytes, content_type)
+    """
+    if boundary is None:
+        boundary = '----Image2HtmlBoundary' + uuid.uuid4().hex
+    bb = boundary.encode('ascii')
+    out = []
+    for key, val in (fields or {}).items():
+        out.append(b'--' + bb)
+        out.append(('Content-Disposition: form-data; name="%s"' % key).encode('utf-8'))
+        out.append(b'')
+        out.append(str(val).encode('utf-8'))
+    for fname_field, fname, content in (files or []):
+        out.append(b'--' + bb)
+        out.append(('Content-Disposition: form-data; name="%s"; filename="%s"'
+                    % (fname_field, fname)).encode('utf-8'))
+        out.append(b'Content-Type: application/octet-stream')
+        out.append(b'')
+        out.append(content)
+    out.append(b'--' + bb + b'--')
+    out.append(b'')
+    return b'\r\n'.join(out), 'multipart/form-data; boundary=' + boundary
+
+
+def _json_or_text(body):
+    text = body.decode('utf-8', errors='replace').strip()
+    try:
+        return json.loads(text), text
+    except Exception:
+        return None, text
+
+
+def _pick(obj, path):
+    """按 'a.b.c' 取嵌套字段，取不到返回 None"""
+    cur = obj
+    for part in path.split('.'):
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        elif isinstance(cur, list) and part.isdigit() and int(part) < len(cur):
+            cur = cur[int(part)]
+        else:
+            return None
+    return cur if isinstance(cur, str) and cur.startswith('http') else None
+
+
+def upload_to_host(host_key, filename, data, cfg):
+    """调用单个图床，返回 (url, error_msg)"""
+    token = (cfg.get('host_token') or '').strip()
+    uid = (cfg.get('host_uid') or '').strip()
+    timeout = IMAGE_HOSTS.get(host_key, {}).get('timeout', 60)
+
+    if host_key == 'uapis':
+        # 国内免注册图床，POST 一个 multipart 就返回直链
+        # 匿名访客每日限 10 次；填了 Key 则不限（Key 走 Authorization: Bearer）
+        body, ctype = encode_multipart({}, [('file', filename, data)])
+        headers = {'Content-Type': ctype, 'Accept': 'application/json'}
+        if token:
+            headers['Authorization'] = 'Bearer ' + token
+        st, resp, _ = http_request('https://uapis.cn/api/v1/image/upload', 'POST',
+                                   body, headers, timeout)
+        js, text = _json_or_text(resp)
+        if isinstance(js, dict):
+            url = _pick(js, 'url') or _pick(js, 'data.url')
+            if url:
+                return url, None
+            return None, js.get('message') or js.get('msg') or ('HTTP %s' % st)
+        return None, 'HTTP %s' % st
+
+    if host_key == 'smms':
+        if not token:
+            return None, 'SM.MS 需要 token'
+        headers = {'Authorization': token}
+        body, ctype = encode_multipart({}, [('smfile', filename, data)])
+        headers['Content-Type'] = ctype
+        # 2024 年起 sm.ms 的上传接口迁移到了 s.ee，这里两个都试
+        last_err = None
+        for endpoint in ('https://s.ee/api/v1/file/upload',
+                         'https://sm.ms/api/v2/upload'):
+            try:
+                st, resp, _ = http_request(endpoint, 'POST', body, dict(headers), timeout)
+            except Exception as e:
+                last_err = '%s: %s' % (type(e).__name__, e)
+                continue
+            js, text = _json_or_text(resp)
+            if isinstance(js, dict):
+                url = _pick(js, 'data.url') or _pick(js, 'data.links.url')
+                if js.get('code') == 200 and url:
+                    return url, None
+                if js.get('success') and url:
+                    return url, None
+                # 同一张图重复上传时直接返回已有的 URL
+                if js.get('code') == 'image_repeated' and js.get('images'):
+                    return js['images'], None
+                last_err = js.get('message') or js.get('msg') or ('HTTP %s' % st)
+            else:
+                last_err = 'HTTP %s' % st
+        return None, last_err
+
+    if host_key == 'imgurl':
+        if not token:
+            return None, 'ImgURL 需要 uid 和 token'
+        body, ctype = encode_multipart({'uid': uid, 'token': token},
+                                       [('file', filename, data)])
+        st, resp, _ = http_request('https://www.imgurl.org/api/v2/upload', 'POST',
+                                   body, {'Content-Type': ctype}, timeout)
+        js, text = _json_or_text(resp)
+        if isinstance(js, dict):
+            url = _pick(js, 'data.url') or _pick(js, 'data.links.url')
+            if js.get('code') == 200 and url:
+                return url, None
+            return None, js.get('msg') or ('HTTP %s' % st)
+        return None, 'HTTP %s' % st
+
+    if host_key == 'picui':
+        if not token:
+            return None, 'PicUI 需要 token'
+        body, ctype = encode_multipart({}, [('file', filename, data)])
+        headers = {'Content-Type': ctype, 'Authorization': 'Bearer ' + token,
+                   'Accept': 'application/json'}
+        st, resp, _ = http_request('https://picui.cn/api/v1/upload', 'POST', body, headers, timeout)
+        js, text = _json_or_text(resp)
+        if isinstance(js, dict):
+            url = _pick(js, 'data.links.url') or _pick(js, 'data.url')
+            if js.get('status') and url:
+                return url, None
+            return None, js.get('message') or js.get('msg') or ('HTTP %s' % st)
+        return None, 'HTTP %s' % st
+
+    if host_key == 'imgbb':
+        if not token:
+            return None, 'ImgBB 需要 API Key'
+        b64 = base64.b64encode(data).decode('ascii')
+        body, ctype = encode_multipart({'image': b64}, [])
+        st, resp, _ = http_request('https://api.imgbb.com/1/upload?key=' + urllib.parse.quote(token),
+                                   'POST', body, {'Content-Type': ctype}, timeout)
+        js, text = _json_or_text(resp)
+        if isinstance(js, dict):
+            url = _pick(js, 'data.url') or _pick(js, 'data.image.url')
+            if url and js.get('success', True):
+                return url, None
+            return None, _pick(js, 'error.message') or js.get('message') or ('HTTP %s' % st)
+        return None, 'HTTP %s' % st
+
+    if host_key == 'catbox':
+        body, ctype = encode_multipart({'reqtype': 'fileupload'},
+                                       [('fileToUpload', filename, data)])
+        st, resp, _ = http_request('https://catbox.moe/user/api.php', 'POST',
+                                   body, {'Content-Type': ctype}, timeout)
+        text = resp.decode('utf-8', errors='replace').strip()
+        if text.startswith('http'):
+            return text, None
+        return None, text[:120] or ('HTTP %s' % st)
+
+    if host_key == 'uguu':
+        body, ctype = encode_multipart({}, [('files[]', filename, data)])
+        st, resp, _ = http_request('https://uguu.se/upload', 'POST',
+                                   body, {'Content-Type': ctype}, timeout)
+        js, text = _json_or_text(resp)
+        url = _pick(js, 'files.0.url') if isinstance(js, dict) else None
+        if url:
+            return url, None
+        return None, 'HTTP %s' % st
+
+    if host_key == 'telegraph':
+        body, ctype = encode_multipart({}, [('file', filename, data)])
+        st, resp, _ = http_request('https://telegra.ph/upload', 'POST',
+                                   body, {'Content-Type': ctype}, timeout)
+        js, text = _json_or_text(resp)
+        if isinstance(js, list) and js:
+            src = (js[0] or {}).get('src')
+            if src:
+                return 'https://telegra.ph' + src, None
+            return None, (js[0] or {}).get('error') or 'telegraph 返回异常'
+        return None, 'HTTP %s' % st
+
+    return None, '未知图床：%s' % host_key
+
+
+def upload_reference_image(filename, data, cfg):
+    """按配置把图片传到图床。
+
+    返回 (url, host_used, public, errors)
+      public=False 表示没传上图床，url 由调用方回退成本地地址
+    """
+    mode = (cfg.get('image_host') or 'auto').strip().lower()
+    if mode not in HOST_CHOICES:
+        mode = 'auto'
+
+    if mode == 'local':
+        return None, 'local', False, []
+
+    if mode == 'auto':
+        # 未配置凭据的图床直接跳过（否则必然 401，白白等一个超时）
+        candidates = [k for k in AUTO_ORDER if host_ready(k, cfg)]
+    else:
+        candidates = [mode]
+
+    errors = []
+    for key in candidates:
+        try:
+            url, err = upload_to_host(key, filename, data, cfg)
+        except Exception as e:
+            url, err = None, '%s: %s' % (type(e).__name__, e)
+        if url:
+            return url, key, True, errors
+        if err:
+            errors.append('%s: %s' % (IMAGE_HOSTS.get(key, {}).get('name', key), err))
+    return None, None, False, errors
+
+
+def host_display_name(key):
+    if not key:
+        return 'local'
+    return IMAGE_HOSTS.get(key, {}).get('name', key)
 
 
 class AppHandler(BaseHTTPRequestHandler):
@@ -220,30 +498,64 @@ class AppHandler(BaseHTTPRequestHandler):
 
         self.send_error(404)
 
+    @staticmethod
+    def _mask(value):
+        if len(value) > 8:
+            return value[:4] + '****' + value[-4:]
+        if value:
+            return '****'
+        return ''
+
     def handle_get_config(self):
         cfg = load_json(CONFIG_PATH, {"api_key": ""})
         key = cfg.get('api_key', '')
-        if len(key) > 8:
-            masked = key[:4] + '****' + key[-4:]
-        elif key:
-            masked = '****'
-        else:
-            masked = ''
-        self.send_json({"api_key": key, "masked": masked})
+        token = (cfg.get('host_token') or '').strip()
+        self.send_json({
+            "api_key": key,
+            "masked": self._mask(key),
+            # 图床配置（新增）
+            "image_host": (cfg.get('image_host') or 'auto').strip(),
+            "host_uid": (cfg.get('host_uid') or '').strip(),
+            "host_token_masked": self._mask(token),
+            "host_saved": bool(token) or cfg.get('image_host') in ('catbox', 'telegraph', 'local'),
+            "host_options": [
+                {
+                    "key": k,
+                    "name": ('自动选择（推荐）' if k == 'auto' else
+                             '仅本地（不上传）' if k == 'local' else
+                             IMAGE_HOSTS[k]['name']),
+                    "need": 'none' if k in ('auto', 'local') else IMAGE_HOSTS[k]['need'],
+                    "tip": (AUTO_TIP if k == 'auto' else
+                            LOCAL_TIP if k == 'local' else
+                            IMAGE_HOSTS[k]['tip']),
+                }
+                for k in HOST_CHOICES
+            ],
+        })
 
     def handle_set_config(self):
         data = self.read_json()
-        api_key = data.get('api_key', '').strip()
-        if not api_key:
-            return self.send_json({"error": "API key cannot be empty"}, 400)
         cfg = load_json(CONFIG_PATH, {"api_key": ""})
-        cfg['api_key'] = api_key
+
+        if 'api_key' in data:
+            api_key = (data.get('api_key') or '').strip()
+            if not api_key:
+                return self.send_json({"error": "API key cannot be empty"}, 400)
+            cfg['api_key'] = api_key
+
+        for field in ('image_host', 'host_token', 'host_uid'):
+            if field in data:
+                cfg[field] = (data.get(field) or '').strip()
+
         save_json_file(CONFIG_PATH, cfg)
-        if len(api_key) > 8:
-            masked = api_key[:4] + '****' + api_key[-4:]
-        else:
-            masked = '****'
-        self.send_json({"success": True, "masked": masked})
+
+        token = (cfg.get('host_token') or '').strip()
+        self.send_json({
+            "success": True,
+            "masked": self._mask(cfg.get('api_key', '')),
+            "image_host": (cfg.get('image_host') or 'auto').strip(),
+            "host_token_masked": self._mask(token),
+        })
 
     def parse_multipart(self):
         content_type = self.headers.get('Content-Type', '')
@@ -305,14 +617,44 @@ class AppHandler(BaseHTTPRequestHandler):
         if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'):
             return self.send_json({"error": "Unsupported image format"}, 400)
 
+        # 1) 本地留档（保持原有行为：uploads/ 里始终有一份，便于本地预览与历史回溯）
         new_filename = f"{uuid.uuid4().hex}{ext}"
         filepath = os.path.join(UPLOADS_DIR, new_filename)
         with open(filepath, 'wb') as f:
             f.write(file_data)
 
         host = self.headers.get('Host', 'localhost:5000')
-        url = f"http://{host}/uploads/{new_filename}"
-        self.send_json({"url": url, "filename": new_filename})
+        local_url = f"http://{host}/uploads/{new_filename}"
+
+        # 2) 上传图床，拿到速创服务器能抓到的公网 URL
+        cfg = load_json(CONFIG_PATH, {"api_key": ""})
+        url, host_used, is_public, errors = upload_reference_image(new_filename, file_data, cfg)
+
+        if is_public:
+            return self.send_json({
+                "url": url,
+                "filename": new_filename,
+                "host": host_used,
+                "host_name": host_display_name(host_used),
+                "public": True,
+                "local_url": local_url,
+            })
+
+        # 3) 图床全部失败 → 回退本地 URL，并如实告知原因
+        resp = {
+            "url": local_url,
+            "filename": new_filename,
+            "host": "local",
+            "host_name": "local",
+            "public": False,
+            "local_url": local_url,
+        }
+        if errors:
+            resp["warning"] = "图床均不可用，已回退为本地地址（速创服务器可能无法访问）"
+            resp["errors"] = errors
+        elif (cfg.get('image_host') or 'auto').strip().lower() != 'local':
+            resp["warning"] = "未配置可用的图床，已回退为本地地址（速创服务器可能无法访问）"
+        return self.send_json(resp)
 
     def handle_generate(self):
         cfg = load_json(CONFIG_PATH, {"api_key": ""})
@@ -471,24 +813,107 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_json({"success": True})
 
 
+def probe_port(port):
+    """判断端口状态：'ours' 本程序已在运行 / 'other' 被别的程序占用 / 'free' 空闲"""
+    # 先发一个 HTTP 请求，看是不是本程序（只看端口占用会把别的程序误判成自己）
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        req = urllib.request.Request(f'http://127.0.0.1:{port}/api/config',
+                                     headers={'User-Agent': 'Image2Html'})
+        with opener.open(req, timeout=2) as resp:
+            data = json.loads(resp.read().decode('utf-8', 'replace'))
+            if isinstance(data, dict) and 'host_options' in data:
+                return 'ours'
+            return 'other'
+    except urllib.error.HTTPError:
+        return 'other'
+    except Exception:
+        pass
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.6)
+        if s.connect_ex(('127.0.0.1', port)) == 0:
+            return 'other'
+    return 'free'
+
+
+def find_free_port(preferred=5000, limit=20):
+    """从 preferred 开始找一个能绑上的端口，避免端口占用直接崩掉。
+
+    这里刻意不设 SO_REUSEADDR：Windows 上它会让两个进程绑到同一端口，
+    结果谁收到连接完全看运气，反而比直接失败更难排查。
+    """
+    for port in range(preferred, preferred + limit):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('0.0.0.0', port))
+                return port
+            except OSError:
+                continue
+    return preferred
+
+
+class AppServer(HTTPServer):
+    """同理：Windows 下关掉 allow_reuse_address，端口冲突要能被发现"""
+    allow_reuse_address = (os.name != 'nt')
+
+
 def open_browser(port):
-    """延迟1秒后自动打开浏览器"""
+    """延迟1秒后自动打开浏览器。
+
+    注意用 127.0.0.1 而不是 localhost：Windows 上 localhost 可能优先解析到
+    IPv6 的 ::1，而服务只监听了 IPv4，浏览器就会打不开页面。
+    设置环境变量 IMAGE2HTML_NO_BROWSER=1 可跳过自动打开（调试时用）。
+    """
+    if os.environ.get('IMAGE2HTML_NO_BROWSER'):
+        return
     time.sleep(1)
-    webbrowser.open(f'http://localhost:{port}')
+    url = f'http://127.0.0.1:{port}'
+    try:
+        webbrowser.open(url)
+    except Exception:
+        print(f"未能自动打开浏览器，请手动访问：{url}", flush=True)
 
 
 def main():
     host = '0.0.0.0'
-    port = 5000
-    server = HTTPServer((host, port), AppHandler)
-    print(f"Image2Html server running at http://localhost:{port}", flush=True)
-    print("Press Ctrl+C to stop.", flush=True)
-    print("Browser will open automatically. If not, visit the URL above.", flush=True)
+    preferred = int(os.environ.get('IMAGE2HTML_PORT', '5000') or 5000)
+
+    # 本程序已经在跑 → 不重复起服务，直接把页面打开（双击两次 run.bat 不会报错）
+    if probe_port(preferred) == 'ours':
+        url = f'http://127.0.0.1:{preferred}'
+        print(f"检测到服务已在运行，直接打开页面：{url}", flush=True)
+        if not os.environ.get('IMAGE2HTML_NO_BROWSER'):
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        return
+
+    port = find_free_port(preferred)
+    if port != preferred:
+        print(f"端口 {preferred} 被占用，自动改用 {port}", flush=True)
+
+    try:
+        server = AppServer((host, port), AppHandler)
+    except OSError as e:
+        print(f"启动失败：无法监听端口 {port} —— {e}", flush=True)
+        print("可以换个端口再试，例如：set IMAGE2HTML_PORT=5050 && python app.py", flush=True)
+        return
+
+    url = f'http://127.0.0.1:{port}'
+    print("=" * 46, flush=True)
+    print("  Image2Html 已启动", flush=True)
+    print(f"  页面地址：{url}", flush=True)
+    print("  浏览器会自动打开；关闭本窗口或按 Ctrl+C 停止服务", flush=True)
+    print("=" * 46, flush=True)
+
     threading.Thread(target=open_browser, args=(port,), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nServer stopped.")
+        print("\n服务已停止。", flush=True)
+    finally:
         server.server_close()
 
 
