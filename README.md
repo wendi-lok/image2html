@@ -39,9 +39,11 @@ python app.py
 
 ### 方式三：下载 Release（**不需要 Python**）
 
-从 [Releases](../../releases) 下载 `Image2Html.zip`，解压后双击 `Image2Html.exe`（或 `启动.bat`）即可运行。
+到 [Releases](../../releases/latest) 下载 `Image2Html.zip`（约 8.8 MB），解压后双击 `Image2Html.exe`（或 `启动.bat`）即可运行。
 
 exe 自带 Python 运行时和全部依赖，`_internal` 文件夹是它的一部分，**不要单独把 exe 拖出来用**。
+
+> Windows 若提示「已保护你的电脑」，点「更多信息」→「仍要运行」即可（exe 未做代码签名）。
 
 
 ## 使用说明
