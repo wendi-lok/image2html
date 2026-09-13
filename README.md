@@ -16,13 +16,13 @@
 
 ## 快速开始
 
-### 方式一：一键启动（Windows，推荐）
+### 方式一：一键启动（Windows，需要 Python）
 
 双击 `run.bat`。它会自动找到可用的 Python、启动服务并打开浏览器。**不需要 pip 安装**（零第三方依赖），关闭窗口即停止服务。
 
 > 如果端口 5000 被占用，会自动顺延到 5001、5002…，终端里会打印实际地址。
 
-### 方式二：命令行
+### 方式二：命令行（需要 Python）
 
 ```bash
 python app.py
@@ -37,9 +37,12 @@ python app.py
 | `IMAGE2HTML_PORT` | 指定端口（默认 5000） |
 | `IMAGE2HTML_NO_BROWSER=1` | 启动时不自动打开浏览器 |
 
-### 方式三：下载 Release（无需 Python）
+### 方式三：下载 Release（**不需要 Python**）
 
-从 [Releases](../../releases) 下载 `Image2Html.zip`，解压后双击 `Image2Html.exe` 即可运行。
+从 [Releases](../../releases) 下载 `Image2Html.zip`，解压后双击 `Image2Html.exe`（或 `启动.bat`）即可运行。
+
+exe 自带 Python 运行时和全部依赖，`_internal` 文件夹是它的一部分，**不要单独把 exe 拖出来用**。
+
 
 ## 使用说明
 
@@ -71,6 +74,10 @@ python app.py
 
 全部失败时会回退成本地地址，并在界面上给出提示（此时生成大概率会失败，因为速创抓不到图）。
 
+**关于降级**：如果默认图床失败并换用了备用图床，界面上会明确告诉你**换成了哪个、以及换的代价**
+（例如 Uguu 的链接约 3 小时后失效）。UAPI 匿名额度是每天 10 张，用完后会返回限流错误并触发降级——
+去 uapis.cn 免费注册拿个 Key 填进设置即可不限量。
+
 ## 项目结构
 
 ```
@@ -78,7 +85,8 @@ Image2Html/
 ├── app.py                # 后端（Python http.server）+ 图床适配器链
 ├── templates/
 │   └── index.html        # 前端单页应用（HTML + CSS + JS）
-├── run.bat               # Windows 一键启动
+├── run.bat               # Windows 一键启动（需要 Python）
+├── build_exe.bat         # 打包成免 Python 的 EXE（开发用）
 ├── data/                 # API Key 配置 + 图床配置 + 历史记录（本地 JSON）
 ├── uploads/              # 本地上传的参考图
 ├── outputs/              # 保存的生成图片
@@ -118,13 +126,33 @@ Response: {"status": 2, "result_urls": [...], "message": ""}
 - `POST /api/save-image` — 保存生成图到本地
 - `GET/POST/PUT/DELETE /api/history[/<id>]` — 历史记录 CRUD
 
-## 打包为 EXE
+## 打包为 EXE（免 Python 分发）
+
+双击 `build_exe.bat` 即可。脚本会自己找 Python、装 PyInstaller、打包，并生成可直接分发的压缩包：
+
+```
+dist/
+├── Image2Html/           # 整个文件夹就是绿色版
+│   ├── Image2Html.exe    # 入口
+│   ├── _internal/        # 自带 Python 运行时，必须和 exe 放一起
+│   ├── 启动.bat          # 出错时会把报错留在窗口里
+│   └── 使用说明.txt
+└── Image2Html.zip        # 发给别人的就是它
+```
+
+手工等价命令：
 
 ```bash
 pip install pyinstaller
 pyinstaller --onedir --name Image2Html --add-data "templates;templates" app.py
-# 输出在 dist/Image2Html/
 ```
+
+关于打包的几个约定：
+
+- 用 `--onedir` 而不是 `--onefile`：启动快，也不会每次解压一坨临时文件到 `%TEMP%`。
+- `templates/` 通过 `--add-data` 打进包，运行时从 `sys._MEIPASS` 读。
+- `data/`、`uploads/`、`outputs/` 放在 **exe 同级目录**，所以换电脑直接拷文件夹即可迁移配置。
+
 
 ## 注意事项
 

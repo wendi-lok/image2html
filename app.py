@@ -21,7 +21,11 @@ else:
     BUNDLE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # User-writable data lives next to the exe (or script in dev mode)
-USER_DIR = os.path.dirname(os.path.abspath(sys.argv[0])) if getattr(sys, 'frozen', False) else BUNDLE_DIR
+if getattr(sys, 'frozen', False):
+    # sys.executable is always the real .exe path when frozen
+    USER_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    USER_DIR = BUNDLE_DIR
 
 TEMPLATES_DIR = os.path.join(BUNDLE_DIR, 'templates')
 UPLOADS_DIR = os.path.join(USER_DIR, 'uploads')
@@ -116,7 +120,7 @@ IMAGE_HOSTS = {
     'catbox':    {'name': 'Catbox',    'need': 'none',      'tip': '免注册，永久保存（海外）',
                   'timeout': 20},
     'uguu':      {'name': 'Uguu',      'need': 'none',      'tip': '免注册，但链接仅保留约 3 小时（海外）',
-                  'timeout': 20},
+                  'timeout': 20, 'expire': '该图床链接仅保留约 3 小时，生成前若已过期会抓不到图'},
     'telegraph': {'name': 'Telegraph', 'need': 'none',      'tip': '免注册（海外，部分国内网络不可达）',
                   'timeout': 20},
 }
@@ -631,14 +635,27 @@ class AppHandler(BaseHTTPRequestHandler):
         url, host_used, is_public, errors = upload_reference_image(new_filename, file_data, cfg)
 
         if is_public:
-            return self.send_json({
+            resp = {
                 "url": url,
                 "filename": new_filename,
                 "host": host_used,
                 "host_name": host_display_name(host_used),
                 "public": True,
                 "local_url": local_url,
-            })
+            }
+            # 降级是有代价的：默认图床失败后换用的备用图床可能限时失效，
+            # 必须让用户知道，否则生成时图挂了会一脸茫然。
+            if errors:
+                resp["warning"] = (
+                    "默认图床不可用，已自动换用「%s」。%s"
+                    % (host_display_name(host_used),
+                       IMAGE_HOSTS.get(host_used, {}).get('expire', '该图床可能不如默认图床稳定'))
+                )
+                resp["errors"] = errors
+            elif IMAGE_HOSTS.get(host_used, {}).get('expire'):
+                resp["warning"] = "当前使用「%s」。%s" % (
+                    host_display_name(host_used), IMAGE_HOSTS[host_used]['expire'])
+            return self.send_json(resp)
 
         # 3) 图床全部失败 → 回退本地 URL，并如实告知原因
         resp = {

@@ -372,6 +372,7 @@ let pendingUploads = 0;      // 正在上传的参考图数量，避免并发突
 let hostOptions = [];        // 后端返回的图床列表
 let savedHostToken = '';     // 已保存的图床 Token（脱敏），仅用于提示
 let savedHasApiKey = false;
+let lastUploadWarning = '';  // 最近一次降级图床的具体原因，用于替换笼统提示
 
 function t(key) {
   return (i18n[currentLang] && i18n[currentLang][key]) || key;
@@ -632,7 +633,12 @@ function uploadOne(file) {
         placeholder.hostName = data.host_name || '';
         placeholder.host = data.host || '';
         showToast(t('upload_success') + (data.public ? ' · ' + t('upload_to') + ' ' + (data.host_name || '') : ''), data.public ? 'success' : 'error');
-        if (data.warning) console.warn('[upload]', data.warning, data.errors || []);
+        if (data.warning) {
+          console.warn('[upload]', data.warning, data.errors || []);
+          lastUploadWarning = data.warning;
+        } else if (data.public) {
+          lastUploadWarning = '';
+        }
       }
       renderRefGrid();
       showRefWarning();
@@ -655,9 +661,10 @@ function showRefWarning() {
   if (notPublic.length) {
     area.innerHTML = '<div class="alert-box alert-warning">' + t('local_fallback') + '</div>';
   } else if (tempHost) {
-    area.innerHTML = '<div class="alert-box alert-warning">' + t('temp_host_warn') + '</div>';
+    area.innerHTML = '<div class="alert-box alert-warning">' + (lastUploadWarning || t('temp_host_warn')) + '</div>';
   } else {
     area.innerHTML = '';
+    lastUploadWarning = '';
   }
 }
 
