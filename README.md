@@ -2,6 +2,9 @@
 
 基于 [速创 API](https://api.wuyinkeji.com/doc/53) 的 GPT-Image-2 图片生成 Web 应用。支持参考图上传、中英文切换、历史任务查询，纯 Python 标准库实现，无需安装第三方依赖。
 
+> 📘 **第一次用？先看 [《Image2Html 使用教程》](Image2Html-使用教程.pdf)**（PDF，12 页）
+> 里面有解压启动、**速创注册与充值**、**每个图床怎么申请和怎么用**、生成流程和排错。
+
 ## 功能特性
 
 - **拖拽 / 粘贴上传参考图** — 图片直接拖进窗口、拖到参考图区域，或 Ctrl+V 粘贴截图，自动上传图床换取公网直链
@@ -67,11 +70,11 @@ exe 自带 Python 运行时和全部依赖，`_internal` 文件夹是它的一�
 
 | 图床 | 需要什么 | 备注 |
 |------|----------|------|
-| UAPI | 免注册 | **默认**，国内可直连 |
-| PicUI | Token | 国内图床 |
-| SM.MS | Token | 接口已迁移到 `s.ee` |
-| ImgURL | UID + Token | |
-| ImgBB | API Key | 海外 |
+| UAPI | 免注册 | **默认**，国内可直连；匿名每日 10 张，填免费 Key 后不限量 |
+| PicUI | Token | 国内图床，Token 在「个人中心」生成 |
+| SM.MS | Token | 接口已迁移到 `s.ee`，**要求账号有有效套餐**，否则拿不到 Token |
+| ImgURL | UID + Token | 两个都要填，Token 走请求体 |
+| ImgBB | API Key | 海外，`imgbb.com` 注册后在 API 页拿 key |
 | Catbox / Uguu / Telegraph | 免注册 | 海外兜底；Uguu 链接约 3 小时失效 |
 
 全部失败时会回退成本地地址，并在界面上给出提示（此时生成大概率会失败，因为速创抓不到图）。
@@ -92,6 +95,8 @@ Image2Html/
 ├── data/                 # API Key 配置 + 图床配置 + 历史记录（本地 JSON）
 ├── uploads/              # 本地上传的参考图
 ├── outputs/              # 保存的生成图片
+├── docs/tutorial/        # 教程 PDF 的模板、构建脚本与截图
+├── Image2Html-使用教程.pdf  # 面向使用者的教程（12 页）
 └── UserDoing.py          # API 调用参考实现（命令行版）
 ```
 
@@ -159,7 +164,10 @@ pyinstaller --onedir --name Image2Html --add-data "templates;templates" app.py
 ## 注意事项
 
 - **参考图 URL**：本地上传的图会先传图床。默认 UAPI 免注册可用，全部图床失败时会回退本地地址并提示。
-- **API 计费**：0.1 元/张，每次生成任务仅提交一次付费 POST，后续轮询均为免费 GET
+- **API 计费**：0.1 元/张（10 点/张），每次生成任务仅提交一次付费 POST，后续轮询均为免费 GET
+- **免费额度为 0**：速创的 GPT-Image-2 接口**没有免费额度**，账户没余额/点数就一定调用失败。
+  充值入口是控制台的 [订单管理](https://api.wuyinkeji.com/user/order)，密钥在 [密钥管理](https://api.wuyinkeji.com/user/key)。
+  名额消耗优先级：vip专属 → 单独包月 → 次数包 → 点数计费 → 账户余额 → 免费额度。详见[教程 PDF](Image2Html-使用教程.pdf) 第 2 章。
 - **生成时间**：不定，前端自动轮询等待，最长约 12 分钟
 - **API Key 安全**：密钥存储在本地 `data/config.json`，请勿将含密钥的 `data/` 目录上传到公开仓库
 

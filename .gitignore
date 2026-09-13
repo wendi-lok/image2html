@@ -23,3 +23,7 @@ __pycache__/
 # 系统文件
 Thumbs.db
 .DS_Store
+
+# 教程构建的中间产物与浏览器临时 profile
+docs/tutorial/tutorial.html
+docs/tutorial/edgeprofile/

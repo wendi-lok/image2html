@@ -387,6 +387,14 @@ function applyLang() {
   });
   document.getElementById('langBtn').textContent = currentLang === 'zh' ? 'EN' : 'ZH';
   document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+
+  // 下面这些是 JS 动态生成的，不在 [data-i18n] 覆盖范围内：
+  // 不显式重渲染的话，切换语言后它们会停在旧语言（参考图的「添加」占位、
+  // 图床下拉框的选项与说明、以及"没用上图床"的提示条）。
+  renderRefGrid();
+  showRefWarning();
+  const sel = document.getElementById('hostSelect');
+  if (sel && hostOptions.length) renderHostOptions(sel.value || 'auto');
 }
 
 function toggleLang() {

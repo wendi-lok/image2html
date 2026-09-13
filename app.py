@@ -38,6 +38,11 @@ SUBMIT_TASK_URL = "https://api.wuyinkeji.com/api/async/image_gpt"
 GET_RESULT_URL = "https://api.wuyinkeji.com/api/async/detail"
 REQUEST_TIMEOUT = 30
 
+# 默认请求 UA。不要用 urllib 自带的 "Python-urllib/3.x"：
+# 部分图床（如 s.ee）前面挂了 Cloudflare，会直接返回 403 + "error code: 1010"。
+DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
 for d in [UPLOADS_DIR, OUTPUTS_DIR, DATA_DIR]:
     os.makedirs(d, exist_ok=True)
 
@@ -81,6 +86,12 @@ def http_request(url, method='GET', data=None, headers=None, timeout=30):
         headers['Content-Type'] = 'application/json'
     elif data is not None and isinstance(data, str):
         data = data.encode('utf-8')
+
+    # urllib 默认发的是 "Python-urllib/3.x"，会被 Cloudflare 直接挡掉
+    # （s.ee 就返回 403 + "error code: 1010"，且响应体不是 JSON，看起来像接口挂了）。
+    # 这里补一个浏览器 UA；调用方若自己指定了 User-Agent 则以调用方的为准。
+    if not any(k.lower() == 'user-agent' for k in headers):
+        headers['User-Agent'] = DEFAULT_UA
 
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
@@ -131,8 +142,9 @@ AUTO_ORDER = ['uapis', 'picui', 'smms', 'imgurl', 'imgbb', 'catbox', 'uguu', 'te
 
 HOST_CHOICES = ['auto', 'local'] + AUTO_ORDER
 
-AUTO_TIP = ('自动模式：按顺序尝试可用图床，第一张成功即用。免注册的 UAPI 默认可用；'
-            '填了 Token 的图床会被优先尝试。全部失败才退回本地地址。')
+AUTO_TIP = ('自动模式：按固定顺序依次尝试，第一张成功即用。顺序为 '
+            'UAPI → PicUI → SM.MS → ImgURL → ImgBB → Catbox → Uguu → Telegraph；'
+            '其中需要登录的图床若没填 Token 会直接跳过。全部失败才退回本地地址。')
 LOCAL_TIP = '仅本地：不上传图床。参考图会以本地地址提交，速创服务器通常抓不到，只建议在调试时使用。'
 
 
@@ -224,32 +236,46 @@ def upload_to_host(host_key, filename, data, cfg):
     if host_key == 'smms':
         if not token:
             return None, 'SM.MS 需要 token'
-        headers = {'Authorization': token}
         body, ctype = encode_multipart({}, [('smfile', filename, data)])
-        headers['Content-Type'] = ctype
-        # 2024 年起 sm.ms 的上传接口迁移到了 s.ee，这里两个都试
+        # 2024 年起 sm.ms 的上传接口迁移到了 s.ee。
+        # 鉴权格式两家文档不一致（sm.ms v2 是裸 token，s.ee 的快速上手写的是 Bearer），
+        # 而拿错误 token 去试时两种写法的返回一模一样（都是 401 Unauthorized），
+        # 无法靠返回值区分，所以两种都试一遍。token 正确时第一次就会命中。
+        attempts = [
+            ('https://s.ee/api/v1/file/upload', 'Bearer ' + token),
+            ('https://s.ee/api/v1/file/upload', token),
+            ('https://sm.ms/api/v2/upload', token),
+            ('https://sm.ms/api/v2/upload', 'Bearer ' + token),
+        ]
         last_err = None
-        for endpoint in ('https://s.ee/api/v1/file/upload',
-                         'https://sm.ms/api/v2/upload'):
+        errs = []
+        for endpoint, auth in attempts:
             try:
-                st, resp, _ = http_request(endpoint, 'POST', body, dict(headers), timeout)
+                st, resp, _ = http_request(endpoint, 'POST', body,
+                                           {'Content-Type': ctype, 'Authorization': auth},
+                                           timeout)
             except Exception as e:
-                last_err = '%s: %s' % (type(e).__name__, e)
+                errs.append('%s: %s' % (type(e).__name__, e))
                 continue
             js, text = _json_or_text(resp)
             if isinstance(js, dict):
                 url = _pick(js, 'data.url') or _pick(js, 'data.links.url')
-                if js.get('code') == 200 and url:
-                    return url, None
-                if js.get('success') and url:
+                # 各版本的成功码不一样（sm.ms 是 code=200，s.ee 用 code=0 + message），
+                # 所以以"有没有拿到 http 开头的 URL"为准，比猜状态码可靠。
+                if url and str(url).startswith('http'):
                     return url, None
                 # 同一张图重复上传时直接返回已有的 URL
                 if js.get('code') == 'image_repeated' and js.get('images'):
                     return js['images'], None
-                last_err = js.get('message') or js.get('msg') or ('HTTP %s' % st)
+                errs.append(js.get('message') or js.get('msg') or ('HTTP %s' % st))
             else:
-                last_err = 'HTTP %s' % st
-        return None, last_err
+                errs.append('HTTP %s' % st)
+        # 优先回一个"像原因"的（例如 Unauthorized，说明 token 不对），
+        # 而不是被后面那个裸 "HTTP 308"（旧域名跳转）盖掉
+        for e in errs:
+            if not e.startswith('HTTP '):
+                return None, e
+        return None, (errs[-1] if errs else last_err)
 
     if host_key == 'imgurl':
         if not token:

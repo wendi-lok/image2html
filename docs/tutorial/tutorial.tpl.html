@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Image2Html 使用教程</title>
+<style>
+  @page { size: A4; margin: 15mm 14mm 16mm 14mm; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    color: #1b1f24; font-size: 10.5pt; line-height: 1.75;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  h1, h2, h3, h4 { line-height: 1.35; margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 6px 0 10px; padding-left: 1.5em; }
+  li { margin: 3px 0; }
+  code {
+    font-family: Consolas, "Cascadia Mono", monospace; font-size: 9.2pt;
+    background: #f2f4f7; border: 1px solid #e3e6ea; border-radius: 3px;
+    padding: 0 4px; color: #0b4a8f;
+  }
+  a { color: #0068d6; text-decoration: none; word-break: break-all; }
+
+  /* ---------- 封面 ---------- */
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
+  .cover .kicker { color: #0068d6; font-weight: 700; letter-spacing: .18em; font-size: 10pt; }
+  .cover h1 { font-size: 30pt; margin: 10px 0 6px; letter-spacing: -.5px; }
+  .cover .sub { font-size: 13pt; color: #55606d; margin-bottom: 26px; }
+  .cover .rule { height: 4px; width: 96px; background: #0068d6; border-radius: 2px; margin-bottom: 26px; }
+  .cover .meta { color: #55606d; font-size: 10pt; }
+  .cover .meta b { color: #1b1f24; }
+  .cover .box { border: 1px solid #e3e6ea; border-radius: 8px; padding: 14px 18px; margin-top: 30px; background: #fafbfc; }
+  .cover .box h4 { font-size: 10.5pt; margin-bottom: 6px; }
+
+  /* ---------- 标题 ---------- */
+  h2 {
+    font-size: 16pt; margin: 0 0 12px; padding: 0 0 7px 0;
+    border-bottom: 2px solid #0068d6; page-break-after: avoid; page-break-before: always;
+  }
+  h2.nobreak { page-break-before: auto; }
+  h3 { font-size: 12.5pt; margin: 18px 0 8px; color: #0b3d78; page-break-after: avoid; }
+  h4 { font-size: 11pt; margin: 14px 0 6px; color: #24303d; page-break-after: avoid; }
+
+  /* ---------- 目录 ---------- */
+  .toc { page-break-after: always; }
+  .toc h2 { page-break-before: auto; }
+  .toc ol { list-style: none; padding-left: 0; counter-reset: sec; }
+  .toc > ol > li { counter-increment: sec; margin: 7px 0; font-weight: 700; font-size: 11pt; }
+  .toc > ol > li::before { content: counter(sec) ". "; color: #0068d6; }
+  .toc ol ol { list-style: none; padding-left: 1.4em; counter-reset: sub; }
+  .toc ol ol li { counter-increment: sub; font-weight: 400; font-size: 10pt; color: #44505d; margin: 2px 0; }
+  .toc ol ol li::before { content: counter(sec) "." counter(sub) "  "; color: #8a95a1; }
+
+  /* ---------- 提示框 ---------- */
+  .box { border-radius: 7px; padding: 10px 14px; margin: 10px 0; page-break-inside: avoid; font-size: 10pt; }
+  .box .bt { font-weight: 700; display: block; margin-bottom: 3px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  .note { background: #eef5ff; border-left: 4px solid #0068d6; }
+  .note .bt { color: #0b4a8f; }
+  .warn { background: #fff6e5; border-left: 4px solid #d98800; }
+  .warn .bt { color: #9a5b00; }
+  .danger { background: #fdeeed; border-left: 4px solid #c0392b; }
+  .danger .bt { color: #a02c20; }
+  .ok { background: #edf9f0; border-left: 4px solid #1a8f4a; }
+  .ok .bt { color: #146c39; }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9.4pt; page-break-inside: auto; }
+  th, td { border: 1px solid #dfe3e8; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #f2f5f9; font-weight: 700; color: #24303d; }
+  tr { page-break-inside: avoid; }
+  td code { font-size: 8.8pt; }
+  .tbl-fix { table-layout: fixed; }
+
+  /* ---------- 图 ---------- */
+  figure { margin: 12px 0 14px; page-break-inside: avoid; text-align: center; }
+  figure img { width: 100%; height: auto; border: 1px solid #d8dde3; border-radius: 6px; display: block; }
+  figcaption { font-size: 9pt; color: #5b6774; margin-top: 6px; text-align: center; }
+  .svg-wrap { margin: 12px 0 14px; page-break-inside: avoid; }
+  .svg-wrap svg { width: 100%; height: auto; display: block; }
+
+  .steps { counter-reset: st; list-style: none; padding-left: 0; }
+  .steps > li { counter-increment: st; position: relative; padding-left: 30px; margin: 9px 0; page-break-inside: avoid; }
+  .steps > li::before {
+    content: counter(st); position: absolute; left: 0; top: 1px;
+    width: 21px; height: 21px; border-radius: 50%; background: #0068d6; color: #fff;
+    font-size: 9.5pt; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .steps > li b { display: block; }
+  .muted { color: #63707d; font-size: 9.4pt; }
+  .kv { font-size: 9.8pt; }
+  hr { border: 0; border-top: 1px solid #e6eaee; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<!-- ================= 封面 ================= -->
+<section class="cover">
+  <div class="kicker">IMAGE2HTML</div>
+  <h1>从充值到出图<br>完整使用教程</h1>
+  <div class="rule"></div>
+  <div class="sub">速创 API 充值取 Key · 参考图图床配置 · 完整生成流程</div>
+  <div class="meta">
+    适用版本：<b>v1.1</b>（含免 Python 安装包）　·　平台：<b>Windows</b><br>
+    项目地址：<b>https://github.com/wendi-lok/image2html</b>
+  </div>
+  <div class="box">
+    <h4>这份教程解决什么问题</h4>
+    <p>Image2Html 本身装好就能打开，但第一次用会卡在两个地方：<b>速创 API 必须先充值才有额度</b>（免费额度为 0），以及<b>参考图需要先传图床换成公网链接</b>。这两步本教程都给了可照着做的步骤，并且标注了每一步在官网上的确切位置。</p>
+  </div>
+</section>
+
+<!-- ================= 目录 ================= -->
+<section class="toc">
+  <h2 class="nobreak">目录</h2>
+  <ol>
+    <li>先把软件跑起来
+      <ol>
+        <li>三种启动方式怎么选</li>
+        <li>免安装版（不需要 Python）</li>
+      </ol>
+    </li>
+    <li>速创 API：注册、充值、取密钥
+      <ol>
+        <li>为什么必须充值</li>
+        <li>注册账号</li>
+        <li>登录控制台</li>
+        <li>充值：把钱变成额度</li>
+        <li>取 API 密钥</li>
+        <li>填进 Image2Html</li>
+        <li>计费规则速查</li>
+      </ol>
+    </li>
+    <li>参考图与图床
+      <ol>
+        <li>为什么非要图床不可</li>
+        <li>七个图床怎么选</li>
+        <li>UAPI（默认，推荐先去注册）</li>
+        <li>PicUI</li>
+        <li>SM.MS / S.EE</li>
+        <li>ImgURL</li>
+        <li>ImgBB</li>
+        <li>免注册的海外兜底</li>
+        <li>自动降级是怎么跑的</li>
+      </ol>
+    </li>
+    <li>完整生成流程
+      <ol>
+        <li>功能分区</li>
+        <li>加参考图的三种方式</li>
+        <li>提交与等待</li>
+        <li>中英文切换与历史记录</li>
+      </ol>
+    </li>
+    <li>出错了怎么查
+      <ol>
+        <li>按报错信息对照表</li>
+        <li>一个容易被忽略的坑：UA 被拦截</li>
+      </ol>
+    </li>
+    <li>附录：接口与路径速查</li>
+  </ol>
+</section>
+
+<!-- ================= 1 ================= -->
+<h2 class="nobreak">1　先把软件跑起来</h2>
+
+<p>Image2Html 是一个本地网页应用：启动后它会自己开一个服务，并用浏览器打开页面。关掉那个命令行窗口，服务就停了。</p>
+
+<h3>1.1　三种启动方式怎么选</h3>
+
+<table class="tbl-fix">
+  <colgroup><col style="width:22%"><col style="width:16%"><col style="width:62%"></colgroup>
+  <thead><tr><th>方式</th><th>需要 Python</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>免安装版<br><span class="muted">推荐给普通用户</span></td>
+      <td><b>不需要</b></td>
+      <td>下载 <code>Image2Html.zip</code> 解压，双击 <code>Image2Html.exe</code> 即可。自带运行环境，换台电脑也能直接用。</td>
+    </tr>
+    <tr>
+      <td>一键启动</td>
+      <td>需要</td>
+      <td>双击项目里的 <code>run.bat</code>。会自动找到 Python 并启动，无需 pip 安装任何依赖。</td>
+    </tr>
+    <tr>
+      <td>命令行</td>
+      <td>需要</td>
+      <td>在项目目录执行 <code>python app.py</code>，适合想指定端口或调试的场景。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>1.2　免安装版（不需要 Python）</h3>
+
+<p>到项目的 Releases 页面下载 <code>Image2Html.zip</code>（约 8.8&nbsp;MB），解压后你会看到：</p>
+
+<div class="svg-wrap">{{SVG:ZIP_LAYOUT}}</div>
+
+<ol class="steps">
+  <li><b>双击 Image2Html.exe</b>（或 <code>启动.bat</code>）。</li>
+  <li><b>浏览器会自动打开</b>页面，地址是 <code>http://127.0.0.1:5000</code>。如果没自动打开，手动访问这个地址即可。</li>
+  <li><b>用完关掉那个黑色命令行窗口</b>即停止服务；关不掉就在任务管理器里结束 <code>Image2Html.exe</code>。</li>
+</ol>
+
+<div class="box danger">
+  <span class="bt">不要把 exe 单独拖出来用</span>
+  <p><code>_internal</code> 文件夹是程序的一部分（里面是运行环境）。<code>Image2Html.exe</code> 单独拷到别处会起不来。分发时请把整个文件夹一起压缩。</p>
+</div>
+
+<div class="box warn">
+  <span class="bt">Windows 提示「已保护你的电脑」</span>
+  <p>这是 SmartScreen 对未签名程序的例行拦截。点「更多信息」→「仍要运行」即可。程序完全在你本机运行，不上传任何数据到第三方。</p>
+</div>
+
+<div class="box note">
+  <span class="bt">端口被占用了怎么办</span>
+  <p>默认用 5000 端口。如果被其他程序占用，程序会自动顺延到 5001、5002……，并在窗口里打印实际地址。以窗口里打印的地址为准。</p>
+</div>
+
+<p class="muted">一个细节：启动后，「API 密钥、图床配置、历史记录」都保存在 exe 同级的 <code>data</code> 文件夹里。换电脑时把这个文件夹一起拷走，配置就还在。</p>
+
+<!-- ================= 2 ================= -->
+<h2>2　速创 API：注册、充值、取密钥</h2>
+
+<p>Image2Html 自己不提供画图能力，它调用的是<b>速创 API</b>（wuyinkeji）的 GPT-Image-2 接口。所以你必须先有一个速创账号，并且账号里<b>有额度</b>。</p>
+
+<h3>2.1　为什么必须充值</h3>
+
+<div class="box danger">
+  <span class="bt">这个接口的免费额度是 0</span>
+  <p>速创的 GPT-Image-2 接口在接口文档里明确写着「免费额度：<b>无</b>」。它不是「先免费用几次再收费」，而是<b>账户里没有余额/点数，调用就会直接失败</b>。所以「注册完就能白画几张」是不成立的，必须走一次充值。</p>
+</div>
+
+<p>好在这接口不贵：参考价 <b>0.1 元/张</b>。也就是说充 10 块钱大概能画 100 张，试错成本很低。充值一次之后，余额/点数/次数包用户还<b>不受请求频率和每日次数限制</b>，用起来不会莫名其妙被限流。</p>
+
+<h3>2.2　注册账号</h3>
+
+<p>打开官网 <a href="https://api.wuyinkeji.com/user/register">https://api.wuyinkeji.com/user/register</a>，也可以从首页 <a href="https://api.wuyinkeji.com/">api.wuyinkeji.com</a> 右上角的「注册」进入。</p>
+
+<p>注册表单需要填这些：</p>
+
+<table>
+  <thead><tr><th style="width:26%">字段</th><th>要求</th></tr></thead>
+  <tbody>
+    <tr><td>邮箱或手机号</td><td>二选一，用来收验证码，也是以后的登录账号</td></tr>
+    <tr><td>验证码</td><td>点「发送验证码」，填收到的 <b>6 位</b>数字</td></tr>
+    <tr><td>密码</td><td>至少 <b>8 位</b>，且必须<b>同时含字母和数字</b>（页面有强度提示）</td></tr>
+    <tr><td>确认密码</td><td>再输一遍</td></tr>
+    <tr><td>邀请码</td><td>选填。有的话可以拿额外积分奖励，没有就留空</td></tr>
+  </tbody>
+</table>
+
+<p>勾选同意《服务条款》和《隐私政策》，点「注册」即可。</p>
+
+<h3>2.3　登录控制台</h3>
+
+<p>登录地址 <a href="https://api.wuyinkeji.com/user/login">https://api.wuyinkeji.com/user/login</a>，提供两种方式：</p>
+
+<ul>
+  <li><b>微信登录</b>：扫码即可，最省事。</li>
+  <li><b>账号登录</b>：用刚才注册的邮箱/手机号 + 密码。</li>
+</ul>
+
+<p>登录成功后进入控制台 <a href="https://api.wuyinkeji.com/user/">https://api.wuyinkeji.com/user/</a>。后面要用的三个入口都在这里：</p>
+
+<table>
+  <thead><tr><th style="width:24%">菜单</th><th style="width:18%">地址</th><th>用来干什么</th></tr></thead>
+  <tbody>
+    <tr><td><b>订单管理</b></td><td><code>/user/order</code></td><td>看余额、看消费记录、<b>充值</b></td></tr>
+    <tr><td><b>密钥管理</b></td><td><code>/user/key</code></td><td>创建和管理 API 密钥</td></tr>
+    <tr><td>VIP / 套餐</td><td><code>/user/vip</code></td><td>看包月、次数包等更划算的方案</td></tr>
+  </tbody>
+</table>
+
+<h3>2.4　充值：把钱变成额度</h3>
+
+<div class="svg-wrap">{{SVG:RECHARGE}}</div>
+
+<ol class="steps">
+  <li><b>进控制台，打开「订单管理」</b>
+      登录后地址栏输入 <code>https://api.wuyinkeji.com/user/order</code>，或从控制台左侧菜单点进去。</li>
+  <li><b>找到余额区，点充值</b>
+      这一页同时显示「费用明细、当前余额、消费记录」。余额为 0 时先充值。</li>
+  <li><b>选金额并付款</b>
+      平台支持在线支付（支付宝/微信）。想先试水就充最小额度即可，0.1 元/张，几块钱够画很久。</li>
+  <li><b>回来看余额是否到账</b>
+      付款后回到「订单管理」，确认余额数字已经变了。没变就刷新页面或稍等一会儿。</li>
+  <li><b>（可选）看有没有更划算的套餐</b>
+      在「VIP / 套餐」页里，<b>次数包</b>和<b>单独包月</b>通常比按张扣余额便宜。用量大的话值得看一眼。</li>
+</ol>
+
+<div class="box note">
+  <span class="bt">充多少合适</span>
+  <p>第一次建议先充 10 元（约 100 张）跑通全流程。确认生成效果和你的使用姿势没问题，再考虑买次数包或包月。</p>
+</div>
+
+<h3>2.5　取 API 密钥</h3>
+
+<ol class="steps">
+  <li><b>打开「密钥管理」</b>
+      地址 <code>https://api.wuyinkeji.com/user/key</code>，或从控制台菜单点「密钥管理」。</li>
+  <li><b>创建一个密钥</b>
+      点新增/创建，按提示起个名字（比如 <code>image2html</code>），便于以后区分用途。</li>
+  <li><b>复制保存</b>
+      创建后完整密钥只显示这一次，<b>当场复制</b>。建议先粘到记事本里备用。</li>
+</ol>
+
+<div class="box danger">
+  <span class="bt">密钥不要泄露</span>
+  <p>这个密钥等同于你账户里的钱——别人拿到就能花你的余额。不要发到群里、不要截图发出去、不要提交到代码仓库。一旦怀疑泄露，立刻在「密钥管理」里删除重建。</p>
+</div>
+
+<h3>2.6　填进 Image2Html</h3>
+
+<p>回到 Image2Html 页面，点右上角的<b>齿轮图标</b>打开设置，把密钥粘进「API 密钥」输入框，点「保存」。</p>
+
+<figure>
+  {{IMG:02-settings}}
+  <figcaption>图 1　设置面板：上面填速创 API 密钥，下面选参考图图床（第三章会讲）</figcaption>
+</figure>
+
+<div class="box ok">
+  <span class="bt">填完就能用了</span>
+  <p>保存后关掉设置，回到主界面，输入提示词点「生成图片」即可。不再需要参考图的话，第三章整章都可以跳过。</p>
+</div>
+
+<h3>2.7　计费规则速查</h3>
+
+<table>
+  <thead><tr><th style="width:30%">项目</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>计费单价</td><td><b>0.1 元/张</b>（按账户余额抵扣），或 <b>10 点/张</b>（按点数抵扣）</td></tr>
+    <tr><td>免费额度</td><td><b>无</b>，账户必须有余额/点数/次数包</td></tr>
+    <tr><td>扣费时机</td><td>只有<b>提交生成任务</b>那一次请求计费；之后查询结果不另外收费</td></tr>
+    <tr><td>计费优先级</td><td>VIP 专属 → 单独包月 → 次数包 → 点数计费 → 账户余额 → 免费额度（从上往下依次判断）</td></tr>
+    <tr><td>频率限制</td><td>余额/点数/次数包计费的用户<b>不限制</b> QPS 与每日次数；免费/测试用户有限制</td></tr>
+  </tbody>
+</table>
+
+<p class="muted">备注：速创还有别的图像模型（例如 GPT-Image-2.5-flare，参考价 0.3 元/张）。Image2Html 目前对接的是 GPT-Image-2 这一个，单价以 0.1 元/张为准。</p>
+
+<!-- ================= 3 ================= -->
+<h2>3　参考图与图床</h2>
+
+<h3>3.1　为什么非要图床不可</h3>
+
+<p>如果你只是想「输入一句话画张图」，可以跳过这一章。但只要你想<b>上传自己的参考图</b>（图生图、改风格、换背景），就绕不开图床。</p>
+
+<p>原因在于：速创接口的参考图参数 <code>urls</code> 只接受<b>公网能访问到的图片链接</b>。而你在本地上传的图，地址形如 <code>http://127.0.0.1:5000/uploads/xxx.png</code>——这个 <code>127.0.0.1</code> 是「你自己这台电脑」的意思，速创的服务器拿到这个地址，访问到的是它自己那台机器，当然什么都找不到。</p>
+
+<p>所以流程必须是：<b>本地图片 → 上传到图床拿到公网直链 → 把这个直链填进 urls</b>。Image2Html 已经把这步自动化了：你把图拖进窗口，它自动上传、自动换成公网链接，你不需要手动复制粘贴。</p>
+
+<div class="svg-wrap">{{SVG:HOST_WHY}}</div>
+
+<h3>3.2　七个图床怎么选</h3>
+
+<p>设置里的「参考图图床」默认是<b>自动选择</b>，会按固定顺序依次尝试，第一张成功就用它。除非你有明确理由，否则保持自动即可。</p>
+
+<table class="tbl-fix">
+  <colgroup><col style="width:15%"><col style="width:12%"><col style="width:16%"><col style="width:57%"></colgroup>
+  <thead><tr><th>图床</th><th>要不要注册</th><th>国内可直连</th><th>特点与建议</th></tr></thead>
+  <tbody>
+    <tr><td><b>UAPI</b><br><span class="muted">默认首选</span></td><td>可不注册</td><td>是</td><td>免注册就能用，但匿名每天只有 10 张。国内直连、速度稳。建议花两分钟注册拿个 Key，之后就顺畅了</td></tr>
+    <tr><td>PicUI</td><td>需要</td><td>是</td><td>国内图床，注册后在个人中心取 Token。长期用比较稳</td></tr>
+    <tr><td>SM.MS<br><span class="muted">已迁至 S.EE</span></td><td>需要</td><td>一般</td><td>老牌图床，现已迁移到 S.EE 域名。需要在 S.EE 后台创建 API Token</td></tr>
+    <tr><td>ImgURL</td><td>需要</td><td>是</td><td>国内图床，要同时填 <b>UID 和 Token</b> 两个值</td></tr>
+    <tr><td>ImgBB</td><td>需要</td><td>否（海外）</td><td>海外老牌图床，需要在官网申请 API Key</td></tr>
+    <tr><td>Catbox</td><td>免注册</td><td>否（海外）</td><td>海外兜底，永久保存，但国内网络经常连不上</td></tr>
+    <tr><td>Uguu</td><td>免注册</td><td>否（海外）</td><td>海外兜底。<b>链接大约 3 小时后失效</b>，只当应急</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <span class="bt">先注册 UAPI，这一件事就能省掉大部分麻烦</span>
+  <p>匿名 10 张/天的额度很容易用完。用完之后虽然会自动换到海外图床，但海外的链接有时效（Uguu 约 3 小时），而且国内直连不稳。花两分钟注册 UAPI 拿个免费 Key，就能一直用最稳的那个。</p>
+</div>
+
+<h3>3.3　UAPI（默认，推荐先去注册）</h3>
+
+<p>UAPI 是 uapis.cn 提供的 API 平台，它的图片上传接口<b>免注册就能用</b>，所以被设为默认。</p>
+
+<h4>免费额度</h4>
+<table>
+  <thead><tr><th style="width:30%">身份</th><th>额度</th></tr></thead>
+  <tbody>
+    <tr><td>未登录访客</td><td>1500 积分，但<b>图片上传接口另有每天 10 张的限流</b></td></tr>
+    <tr><td>登录用户</td><td><b>每月 3500 积分，每月 1 号自动重置</b>，且不受上面那个 10 张限制</td></tr>
+  </tbody>
+</table>
+
+<h4>取 Key 的步骤</h4>
+<ol class="steps">
+  <li><b>打开 <a href="https://uapis.cn/login">https://uapis.cn/login</a> 注册并登录</b>
+      支持常见方式注册，登录后进入控制台。</li>
+  <li><b>进控制台 <a href="https://uapis.cn/console">https://uapis.cn/console</a></b>
+      在这里能看到你的用量和额度。</li>
+  <li><b>找到 API Key（页面上叫 <code>uapikey</code>）并复制</b>
+      UAPI 官方文档里提到的凭证就叫 <code>uapikey</code>，在控制台可以查看/创建。</li>
+  <li><b>粘进 Image2Html</b>
+      设置 → 参考图图床选「UAPI」→「图床 Token / API Key」粘贴 → 保存。</li>
+</ol>
+
+<div class="box note">
+  <span class="bt">不填也能用</span>
+  <p>「图床 Token / API Key」这个框是<b>可选</b>的。留空就走匿名额度（每天 10 张）；填了就不限量。这是全场性价比最高的一次注册。</p>
+</div>
+
+<h3>3.4　PicUI</h3>
+
+<p>PicUI（picui.cn）是国内图床，接口采用 Bearer Token 鉴权；<b>不带头就会被当成游客上传</b>，所以想稳定使用建议注册。</p>
+
+<ol class="steps">
+  <li><b>注册</b>：打开 <a href="https://picui.cn/register">https://picui.cn/register</a> 完成注册。</li>
+  <li><b>登录进个人中心</b>：<a href="https://picui.cn/user/dashboard">https://picui.cn/user/dashboard</a>。</li>
+  <li><b>找到 Token</b>：在个人中心（个人设置/接口相关区域）能看到属于你的 API Token，复制它。</li>
+  <li><b>填进设置</b>：参考图图床选「PicUI」，Token 粘进去，保存。</li>
+</ol>
+
+<p class="muted">技术上它把 Token 放在 <code>Authorization: Bearer &lt;token&gt;</code> 请求头里调用 <code>https://picui.cn/api/v1/upload</code>。这些细节你不用管，程序已经处理好了。接口有每分钟请求配额，超额会返回 429。</p>
+
+<h3>3.5　SM.MS / S.EE</h3>
+
+<p>SM.MS 是老牌免费图床，但 2024 年起它的上传接口已经<b>迁移到了 S.EE 域名</b>（旧地址会返回 308 跳转）。所以现在要拿的是 S.EE 的 API Token。</p>
+
+<ol class="steps">
+  <li><b>打开 <a href="https://s.ee/">https://s.ee/</a> 注册并登录</b>
+      按 S.EE 官方文档的说法，前提是「一个拥有有效套餐的 S.EE 账号」。</li>
+  <li><b>进入开发者 / API Token 区域，创建一个 Token</b>
+      S.EE 后台有专门的 Token 管理入口（页面上标注为 API Token / Developer），点 Create Token 生成。</li>
+  <li><b>复制这个 Token</b></li>
+  <li><b>填进 Image2Html</b>：参考图图床选「SM.MS」，Token 粘进去，保存。</li>
+</ol>
+
+<div class="box note">
+  <span class="bt">程序会把两种写法都试一遍</span>
+  <p>SM.MS 的老接口和 S.EE 的新接口对鉴权头的格式要求不一致（一个用 Token 原文，一个文档写的是 <code>Bearer</code>）。程序对这两个地址、两种写法一共试四次，哪种能通就用哪种，你不用手动选。</p>
+</div>
+
+<h3>3.6　ImgURL</h3>
+
+<p>ImgURL（imgurl.org）是国内图床，它的接口比较特殊：需要<b>同时</b>提供 <b>UID</b> 和 <b>Token</b> 两个值，而且它们是放在请求体里的，不是放在请求头里。</p>
+
+<ol class="steps">
+  <li><b>注册</b>：打开 <a href="https://www.imgurl.org/user/register">https://www.imgurl.org/user/register</a>。</li>
+  <li><b>登录后进个人中心</b>：地址是 <a href="https://www.imgurl.org/account">https://www.imgurl.org/account</a>。</li>
+  <li><b>分别复制 UID 和 Token</b>：这两个值都要。</li>
+  <li><b>填进 Image2Html</b>：参考图图床选「ImgURL」。这时设置面板会<b>多出一个 UID 输入框</b>，把 UID 填进这个新框、Token 填进原来的框，然后保存。</li>
+</ol>
+
+<div class="box warn">
+  <span class="bt">只填 Token 不填 UID 是不会成功的</span>
+  <p>这两个值必须配对使用。切换图床时留意设置面板里是否出现了额外的 UID 输入框。</p>
+</div>
+
+<h3>3.7　ImgBB</h3>
+
+<p>ImgBB 是海外老牌图床，需要 API Key。注意它是<b>海外站点</b>，国内网络直连可能不稳。</p>
+
+<ol class="steps">
+  <li><b>注册</b>：打开 <a href="https://imgbb.com/signup">https://imgbb.com/signup</a> 完成注册。</li>
+  <li><b>登录后打开 <a href="https://api.imgbb.com/">https://api.imgbb.com/</a></b>
+      登录状态下这个页面会显示属于你的 API Key（也可从 <code>imgbb.com/api</code> 进入）。</li>
+  <li><b>复制 API Key</b>。</li>
+  <li><b>填进 Image2Html</b>：参考图图床选「ImgBB」，Key 粘进「图床 Token / API Key」，保存。</li>
+</ol>
+
+<h3>3.8　免注册的海外兜底</h3>
+
+<p>还有三个不需要注册的图床，程序把它们放在顺序的最后，属于「实在没辙了」的兜底：</p>
+
+<table>
+  <thead><tr><th style="width:18%">图床</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>Catbox</td><td>免注册、文件永久保存。但国内网络直连经常失败。</td></tr>
+    <tr><td>Uguu</td><td>免注册、上传快。<b>但链接大约 3 小时后就会失效</b>，只适合马上要用的场景。</td></tr>
+    <tr><td>Telegraph</td><td>免注册。国内网络通常不可达。</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <span class="bt">看到「已自动换用 Uguu」该怎么办</span>
+  <p>这句话的意思是：默认图床（UAPI）没成功，程序换到了 Uguu。图能用，<b>但那张图的链接大约 3 小时后就失效了</b>——如果你过一会儿才去生成，可能就会失败。</p>
+  <p>正确的处理是：去 UAPI 注册拿一个免费 Key 填进设置。这通常就是「UAPI 匿名额度（每天 10 张）用完了」这一个原因。</p>
+</div>
+
+<h3>3.9　自动降级是怎么跑的</h3>
+
+<p>「自动选择」不是随便挑一个，而是有明确顺序的。理解这个顺序，你就能看懂界面上那些提示。</p>
+
+<div class="svg-wrap">{{SVG:HOST_CHAIN}}</div>
+
+<p>顺序是固定的：</p>
+
+<p><code>UAPI → PicUI → SM.MS → ImgURL → ImgBB → Catbox → Uguu → Telegraph</code></p>
+
+<p>其中<b>需要登录的图床，如果没填 Token 会被直接跳过</b>（否则每次都白等一个超时）。第一个成功的就用它，只有全部失败才回退成不可用的本地地址。</p>
+
+<div class="box ok">
+  <span class="bt">这个设计最实用的一点：它会告诉你「换了哪个、代价是什么」</span>
+  <p>如果降级发生了，界面上会明确写出换成了哪个图床、以及这个图床的代价。不会让你只看到一句笼统的「上传成功」。</p>
+</div>
+
+<figure>
+  {{IMG:04-refs}}
+  <figcaption>图 2　上传参考图后的真实界面：图片左下角的徽标是实际使用的图床（这里是 Uguu），下方的黄色提示条说明了降级原因和代价</figcaption>
+</figure>
+
+<!-- ================= 4 ================= -->
+<h2>4　完整生成流程</h2>
+
+<figure>
+  {{IMG:01-home}}
+  <figcaption>图 3　主界面：左侧是输入区，右侧是出图区</figcaption>
+</figure>
+
+<h3>4.1　功能分区</h3>
+
+<table>
+  <thead><tr><th style="width:24%">区域</th><th>作用</th></tr></thead>
+  <tbody>
+    <tr><td>提示词</td><td>描述你想要的画面。必填。</td></tr>
+    <tr><td>宽高比例</td><td>默认「自动」。可选 1:1、16:9、9:16、4:3、3:4、3:2、2:3、21:9 等共 14 种。</td></tr>
+    <tr><td>参考图片</td><td>最多 5 张，可拖拽排序。不填就是纯文生图。</td></tr>
+    <tr><td>生成图片</td><td>提交任务。</td></tr>
+    <tr><td>历史记录</td><td>折叠面板。记录每次任务的 task_id，点开可随时重新查询结果——因为结果存在速创服务器上，历史记录不会过期。</td></tr>
+    <tr><td>右上角</td><td><code>EN</code> 切换中英文；齿轮打开设置。</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2　加参考图的三种方式</h3>
+
+<p>三种方式殊途同归，都会自动走「上传图床 → 换公网链接」这一步：</p>
+
+<ol class="steps">
+  <li><b>把图片文件拖进窗口任意位置</b>
+      整个页面会出现一个提示遮罩，松开鼠标就开始上传。拖到「参考图片」区域里也可以。</li>
+  <li><b>Ctrl + V 粘贴截图</b>
+      截图工具截完直接粘贴，适合从其他软件里抓图。不需要先存成文件。</li>
+  <li><b>点「+」选文件，或直接粘贴图片网址</b>
+      如果你已经有一个公网图片链接，粘到「或粘贴图片链接」里点「添加」即可，这种情况不需要图床。</li>
+</ol>
+
+<figure>
+  {{IMG:03-drag}}
+  <figcaption>图 4　把图片拖进窗口时会出现的提示遮罩（真实界面，背景做了模糊处理）</figcaption>
+</figure>
+
+<p>上传期间图片位置上会显示一个转圈占位符，上传完成后替换成真实图片，并在左下角打上<b>来源图床的徽标</b>（例如 <code>UAPI</code>、<code>Uguu</code>）。如果上传失败，图片会被移除并弹出提示。</p>
+
+<h3>4.3　提交与等待</h3>
+
+<div class="svg-wrap">{{SVG:FLOW}}</div>
+
+<ol class="steps">
+  <li><b>填提示词，选比例，点「生成图片」</b>
+      如果还有参考图在上传中，会被拦下来并提示你等一下——这是为了避免提交残缺的参考图列表。</li>
+  <li><b>程序提交任务，拿到 task_id</b>
+      这一步是唯一计费的请求。</li>
+  <li><b>自动轮询等待</b>
+      程序每 <b>24 秒</b>查询一次结果，界面上有倒计时进度条。最多查询 <b>30 次</b>，也就是大约 <b>12 分钟</b>。</li>
+  <li><b>出图后预览、保存、重新生成</b>
+      结果展示在右侧，可以保存到本地，也可以直接用同一个提示词重新生成一张。</li>
+</ol>
+
+<div class="box note">
+  <span class="bt">生成时间是不确定的</span>
+  <p>取决于当时的排队情况，快的几十秒，慢的需要几分钟。进度条在转就说明还在跑，不要重复点「生成图片」——每次提交都是一次新计费。</p>
+</div>
+
+<div class="box warn">
+  <span class="bt">等太久没出结果但浏览器关掉了？不用重画</span>
+  <p>展开「历史记录」，找到那条任务点查询即可。任务结果存在速创服务器上，不会因为你关了页面就丢失，重新查询也不额外收费。</p>
+</div>
+
+<h3>4.4　中英文切换与历史记录</h3>
+
+<p>右上角的 <code>EN</code> / <code>ZH</code> 按钮切换界面语言，选择会被记住。</p>
+
+<figure>
+  {{IMG:05-en}}
+  <figcaption>图 5　英文界面</figcaption>
+</figure>
+
+<p>「历史记录」面板点开后可以查看每次任务的提示词、task_id 和结果；点 <code>task_id</code> 旁边的复制按钮可以把它抄下来，之后单独查询。</p>
+
+<!-- ================= 5 ================= -->
+<h2>5　出错了怎么查</h2>
+
+<h3>5.1　按报错信息对照表</h3>
+
+<table class="tbl-fix">
+  <colgroup><col style="width:34%"><col style="width:66%"></colgroup>
+  <thead><tr><th>你看到的提示</th><th>原因与处理</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>提示需要先设置 API 密钥</td>
+      <td>还没填速创密钥。点右上角齿轮填入并保存。</td>
+    </tr>
+    <tr>
+      <td>提交失败，提示余额/额度相关</td>
+      <td>速创账户没钱了。去「订单管理」确认余额，必要时充值。免费额度为 0，账户没余额就一定失败。</td>
+    </tr>
+    <tr>
+      <td>上传参考图后提示「已自动换用 Uguu / Catbox」</td>
+      <td>默认图床 UAPI 没成功（多半是匿名额度用完了）。图能继续用，但海外链接可能几小时后失效。去 UAPI 注册拿 Key 填进设置即可。</td>
+    </tr>
+    <tr>
+      <td>提示「图床均不可用，已回退为本地地址」</td>
+      <td>所有图床都失败了。此时参考图地址是本地地址，速创服务器抓不到，生成大概率会失败。检查网络，或在设置里为某个图床填上 Token。</td>
+    </tr>
+    <tr>
+      <td>提示不支持该图片格式</td>
+      <td>只接受 jpg / jpeg / png / gif / webp / bmp 六种。其他格式先转换一下。</td>
+    </tr>
+    <tr>
+      <td>参考图加不进去 / 提示最多 5 张</td>
+      <td>上限就是 5 张。删掉一张再试。</td>
+    </tr>
+    <tr>
+      <td>浏览器打不开页面</td>
+      <td>看命令行窗口里打印的实际地址（端口可能不是 5000）。手动访问那个地址。</td>
+    </tr>
+    <tr>
+      <td>双击 exe 一闪而过</td>
+      <td>启动报错了。改用 <code>启动.bat</code> 启动，它会把错误信息留在窗口里。</td>
+    </tr>
+    <tr>
+      <td>填了图床 Token 但还是失败</td>
+      <td>确认图床类型和 Token 是否配套；ImgURL 需要同时填 UID 和 Token；SM.MS 需要 S.EE 的 Token 且账号有有效套餐。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.2　一个容易被忽略的坑：UA 被拦截</h3>
+
+<p>如果你要自己改这个项目、或者自己写脚本调图床接口，有一个坑值得提前知道：</p>
+
+<div class="box note">
+  <span class="bt">用 Python 默认的 User-Agent 请求某些图床，会被 Cloudflare 直接挡掉</span>
+  <p>Python 的 <code>urllib</code> 默认会发 <code>Python-urllib/3.x</code> 作为 User-Agent。部分图床（例如 S.EE）前面挂了 Cloudflare，看到这个 UA 会直接返回 <b>403</b>，响应体是一句 <code>error code: 1010</code>——它不是 JSON，看起来很像「接口挂了」，实际只是被 WAF 拦了。</p>
+  <p>解决办法是发一个普通的浏览器 UA。这一点在 v1.1 里已经修好了。</p>
+</div>
+
+<p>反过来，如果你看到某个图床「文档里明明能用，自己一调就 403」，先用 <code>curl</code> 再试一次。curl 和浏览器都能通、只有你的脚本不通，那基本就是 UA 或者请求头的问题。</p>
+
+<!-- ================= 6 ================= -->
+<h2>6　附录：接口与路径速查</h2>
+
+<h3>6.1　速创 API</h3>
+
+<table class="tbl-fix">
+  <colgroup><col style="width:20%"><col style="width:80%"></colgroup>
+  <thead><tr><th>项目</th><th>值</th></tr></thead>
+  <tbody>
+    <tr><td>官网</td><td><code>https://api.wuyinkeji.com</code></td></tr>
+    <tr><td>注册</td><td><code>https://api.wuyinkeji.com/user/register</code></td></tr>
+    <tr><td>登录</td><td><code>https://api.wuyinkeji.com/user/login</code></td></tr>
+    <tr><td>控制台</td><td><code>https://api.wuyinkeji.com/user/</code></td></tr>
+    <tr><td>订单管理（充值）</td><td><code>https://api.wuyinkeji.com/user/order</code></td></tr>
+    <tr><td>密钥管理</td><td><code>https://api.wuyinkeji.com/user/key</code></td></tr>
+    <tr><td>提交任务</td><td><code>POST https://api.wuyinkeji.com/api/async/image_gpt</code></td></tr>
+    <tr><td>查询结果</td><td><code>GET https://api.wuyinkeji.com/api/async/detail</code></td></tr>
+    <tr><td>鉴权方式</td><td>请求头 <code>Authorization: &lt;你的密钥&gt;</code>，也支持 URL 参数 <code>?key=&lt;你的密钥&gt;</code></td></tr>
+    <tr><td>请求参数</td><td><code>prompt</code>（必填）、<code>size</code>（可选，默认 auto）、<code>urls</code>（可选，参考图公网链接数组）</td></tr>
+    <tr><td>官方文档</td><td><code>https://api.wuyinkeji.com/doc/53</code>（GPT-Image-2）</td></tr>
+  </tbody>
+</table>
+
+<h3>6.2　图床速查</h3>
+
+<table class="tbl-fix">
+  <colgroup><col style="width:13%"><col style="width:24%"><col style="width:26%"><col style="width:37%"></colgroup>
+  <thead><tr><th>图床</th><th>注册 / 登录</th><th>取凭据的位置</th><th>上传接口与鉴权</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>UAPI</b></td>
+      <td><code>uapis.cn/login</code></td>
+      <td>控制台 <code>uapis.cn/console</code>，字段名 <code>uapikey</code></td>
+      <td><code>POST uapis.cn/api/v1/image/upload</code><br><code>Authorization: Bearer &lt;key&gt;</code></td>
+    </tr>
+    <tr>
+      <td>PicUI</td>
+      <td><code>picui.cn/register</code></td>
+      <td>个人中心 <code>picui.cn/user/dashboard</code></td>
+      <td><code>POST picui.cn/api/v1/upload</code><br><code>Authorization: Bearer &lt;token&gt;</code></td>
+    </tr>
+    <tr>
+      <td>SM.MS<br>/ S.EE</td>
+      <td><code>s.ee</code></td>
+      <td>S.EE 后台的 API Token / Developer 区</td>
+      <td><code>POST s.ee/api/v1/file/upload</code><br><code>Authorization: &lt;token&gt;</code></td>
+    </tr>
+    <tr>
+      <td>ImgURL</td>
+      <td><code>imgurl.org/user/register</code></td>
+      <td>个人中心 <code>imgurl.org/account</code>，取 UID + Token</td>
+      <td><code>POST imgurl.org/api/v2/upload</code><br>请求体字段 <code>uid</code> + <code>token</code></td>
+    </tr>
+    <tr>
+      <td>ImgBB</td>
+      <td><code>imgbb.com/signup</code></td>
+      <td>登录后访问 <code>api.imgbb.com</code></td>
+      <td><code>POST api.imgbb.com/1/upload</code><br>参数 <code>key</code> + <code>image</code></td>
+    </tr>
+    <tr>
+      <td>Catbox<br>Uguu<br>Telegraph</td>
+      <td>免注册</td>
+      <td>—</td>
+      <td>—（免注册兜底，海外，Uguu 链接约 3 小时失效）</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>6.3　本地文件与目录</h3>
+
+<table>
+  <thead><tr><th style="width:24%">路径</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td><code>data/config.json</code></td><td>速创密钥 + 图床配置。<b>含密钥，不要外传</b></td></tr>
+    <tr><td><code>data/history.json</code></td><td>历史任务记录（含 task_id）</td></tr>
+    <tr><td><code>uploads/</code></td><td>你上传的参考图留档</td></tr>
+    <tr><td><code>outputs/</code></td><td>生成结果的本地缓存</td></tr>
+  </tbody>
+</table>
+
+<hr>
+<p class="muted">本教程基于 Image2Html v1.1。速创与各图床的界面、价格、额度可能随时间调整，文中链接与步骤在编写时均经实测核对；若你看到的页面与文中不一致，以官网实际界面为准。</p>
+
+</body>
+</html>
